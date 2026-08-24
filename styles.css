@@ -1,0 +1,165 @@
+/* ============================================================
+   APPLEMDT Tracker — shared styles
+   Design: field-ops console. Dark, high-contrast, legible from
+   across a room on the TV; tight and thumb-friendly on phone.
+   ============================================================ */
+
+:root {
+  --bg: #0D1210;
+  --bg-raised: #141B17;
+  --surface: #1A231D;
+  --surface-hover: #212C24;
+  --line: #2A362E;
+  --line-bright: #3D4C41;
+
+  --text: #E9E6DC;
+  --text-muted: #8FA096;
+  --text-dim: #5C6B61;
+
+  --brass: #C6A15B;
+  --brass-dim: #8A7040;
+  --teal: #4FA88A;
+  --teal-dim: #2E6152;
+  --rust: #C1543E;
+  --rust-dim: #7A3527;
+
+  --font-display: 'Oswald', 'Arial Narrow', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+}
+
+::selection { background: var(--brass-dim); color: var(--text); }
+
+a { color: var(--teal); }
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: var(--font-body);
+}
+
+/* Focus visibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* ---------- Eyebrow / label pattern ---------- */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ---------- Stage rail (signature element) ----------
+   A 7-node horizontal line representing the real pipeline
+   sequence. Filled = past, lit = current, outline = future. */
+.stage-rail {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.stage-rail .node-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+.stage-rail .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-bright);
+  background: var(--bg-raised);
+  z-index: 1;
+  flex-shrink: 0;
+}
+.stage-rail .node-wrap.done .dot {
+  background: var(--teal-dim);
+  border-color: var(--teal);
+}
+.stage-rail .node-wrap.current .dot {
+  background: var(--brass);
+  border-color: var(--brass);
+  box-shadow: 0 0 0 4px rgba(198, 161, 91, 0.22);
+}
+.stage-rail .track {
+  position: absolute;
+  top: 5px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line-bright);
+  z-index: 0;
+}
+.stage-rail .node-wrap:first-child .track { display: none; }
+.stage-rail .node-wrap.done .track,
+.stage-rail .node-wrap.current .track {
+  background: var(--teal-dim);
+}
+.stage-rail .label {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--text-dim);
+  line-height: 1.25;
+}
+.stage-rail .node-wrap.current .label { color: var(--brass); }
+.stage-rail .node-wrap.done .label { color: var(--text-muted); }
+
+/* ---------- Flag badges ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.badge.flag {
+  background: rgba(193, 84, 62, 0.14);
+  color: #E08B77;
+  border-color: var(--rust-dim);
+}
+.badge.waiver {
+  background: rgba(198, 161, 91, 0.14);
+  color: var(--brass);
+  border-color: var(--brass-dim);
+}

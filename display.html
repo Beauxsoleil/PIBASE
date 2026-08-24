@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APPLEMDT — Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { overflow: hidden; }
+
+  .board {
+    padding: 28px 32px;
+    min-height: 100vh;
+  }
+
+  .board-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .board-header h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.9rem;
+    letter-spacing: 0.02em;
+    margin: 0;
+    color: var(--text);
+  }
+  .board-header .count {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+  .clock {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card.flagged { border-color: var(--rust-dim); }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4px;
+  }
+  .card-top .name {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .badges { display: flex; gap: 6px; }
+
+  .meta-line {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    letter-spacing: 0.02em;
+  }
+
+  .card .stage-rail { margin: 10px 0 12px; }
+
+  .latest-note {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .latest-note .note-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  .empty-state {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    text-align: center;
+    padding: 80px 20px;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="board-header">
+    <div>
+      <div class="eyebrow">APPLEMDT</div>
+      <h1>Applicant Board</h1>
+    </div>
+    <div style="text-align:right;">
+      <div class="count" id="count">— applicants</div>
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="empty-state">Loading board…</div>
+  </div>
+</div>
+
+<script type="module">
+  import { db, collection, onSnapshot, query, orderBy, STAGES, STAGE_SHORT, needsReview }
+    from './firebase-config.js';
+
+  const grid = document.getElementById('grid');
+  const countEl = document.getElementById('count');
+  const clockEl = document.getElementById('clock');
+
+  function tickClock() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+  }
+  tickClock();
+  setInterval(tickClock, 30000);
+
+  function renderStageRail(currentStage) {
+    const currentIdx = STAGES.indexOf(currentStage);
+    return `<div class="stage-rail">` + STAGES.map((stage, i) => {
+      let cls = '';
+      if (i < currentIdx) cls = 'done';
+      else if (i === currentIdx) cls = 'current';
+      return `
+        <div class="node-wrap ${cls}">
+          <div class="track"></div>
+          <div class="dot"></div>
+          <div class="label">${STAGE_SHORT[stage]}</div>
+        </div>`;
+    }).join('') + `</div>`;
+  }
+
+  function renderCard(applicant) {
+    const flagged = needsReview(applicant);
+    const badges = [];
+    if (flagged) badges.push(`<span class="badge flag">Review</span>`);
+    if (applicant.statusStage === 'Waiver' && applicant.waiverType) {
+      badges.push(`<span class="badge waiver">${applicant.waiverType}</span>`);
+    }
+
+    const meta = [
+      applicant.age ? `${applicant.age} yo` : null,
+      applicant.priorService || null,
+      applicant.educationLevel || null
+    ].filter(Boolean).join('  ·  ');
+
+    const note = applicant.latestNote
+      ? `<div class="latest-note"><span class="note-label">Latest note</span>${escapeHtml(applicant.latestNote)}</div>`
+      : '';
+
+    return `
+      <div class="card ${flagged ? 'flagged' : ''}">
+        <div class="card-top">
+          <div class="name">${escapeHtml(applicant.name || 'Unnamed')}</div>
+          <div class="badges">${badges.join('')}</div>
+        </div>
+        <div class="meta-line">${meta}</div>
+        ${renderStageRail(applicant.statusStage || STAGES[0])}
+        ${note}
+      </div>`;
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  const q = query(collection(db, 'applicants'), orderBy('updatedAt', 'desc'));
+  onSnapshot(q, (snapshot) => {
+    if (snapshot.empty) {
+      grid.innerHTML = `<div class="empty-state">No applicants yet</div>`;
+      countEl.textContent = '0 applicants';
+      return;
+    }
+    const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    countEl.textContent = `${docs.length} applicant${docs.length === 1 ? '' : 's'}`;
+    grid.innerHTML = docs.map(renderCard).join('');
+  }, (err) => {
+    grid.innerHTML = `<div class="empty-state">Connection error — check MiFi / network</div>`;
+    console.error(err);
+  });
+</script>
+
+</body>
+</html>
