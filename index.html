@@ -9,115 +9,55 @@
 <link rel="stylesheet" href="styles.css">
 <style>
   .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 80px; }
-
-  header.top {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 18px;
+  header.top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  header.top h1 { font-family:var(--font-display); font-size:1.3rem; font-weight:600; margin:0; }
+  #signOutBtn { background:none; border:1px solid var(--line); color:var(--text-muted); font-size:.75rem; padding:6px 10px; border-radius:4px; }
+  #loginScreen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card { width:100%; max-width:340px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:28px 24px; }
+  .login-card h1 { font-family:var(--font-display); font-size:1.4rem; margin:0 0 4px; }
+  .login-card p.eyebrow { margin-bottom:20px; }
+  label { display:block; font-size:.78rem; color:var(--text-muted); margin:14px 0 5px; }
+  label:first-child { margin-top:0; }
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
+    width:100%; background:var(--bg-raised); border:1px solid var(--line); color:var(--text); border-radius:4px; padding:10px 11px; font-size:.95rem;
   }
-  header.top h1 {
-    font-family: var(--font-display);
-    font-size: 1.3rem; font-weight: 600; margin: 0;
-  }
-  #signOutBtn {
-    background: none; border: 1px solid var(--line);
-    color: var(--text-muted); font-size: 0.75rem;
-    padding: 6px 10px; border-radius: 4px;
-  }
-
-  /* ---- Login ---- */
-  #loginScreen {
-    min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    padding: 20px;
-  }
-  .login-card {
-    width: 100%; max-width: 340px;
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 28px 24px;
-  }
-  .login-card h1 {
-    font-family: var(--font-display); font-size: 1.4rem; margin: 0 0 4px;
-  }
-  .login-card p.eyebrow { margin-bottom: 20px; }
-
-  /* ---- Form elements ---- */
-  label { display: block; font-size: 0.78rem; color: var(--text-muted); margin: 14px 0 5px; }
-  label:first-child { margin-top: 0; }
-  input[type="text"], input[type="email"], input[type="password"], input[type="number"],
-  select, textarea {
-    width: 100%; background: var(--bg-raised); border: 1px solid var(--line);
-    color: var(--text); border-radius: 4px; padding: 10px 11px; font-size: 0.95rem;
-  }
-  textarea { resize: vertical; min-height: 60px; }
-  .field-row { display: flex; gap: 10px; }
-  .field-row > div { flex: 1; }
-
-  .btn {
-    display: inline-block; border: none; border-radius: 4px;
-    padding: 11px 18px; font-size: 0.9rem; font-weight: 500;
-    font-family: var(--font-body);
-  }
-  .btn-primary { background: var(--brass); color: #16130A; width: 100%; margin-top: 18px; }
-  .btn-secondary { background: transparent; border: 1px solid var(--line-bright); color: var(--text-muted); }
-  .btn-block { width: 100%; }
-  .error-msg { color: #E08B77; font-size: 0.82rem; margin-top: 10px; min-height: 1em; }
-
-  /* ---- Applicant list ---- */
-  .add-btn {
-    width: 100%; background: var(--surface); border: 1px dashed var(--line-bright);
-    color: var(--text-muted); border-radius: var(--radius); padding: 14px;
-    font-size: 0.9rem; margin-bottom: 16px;
-  }
-  .list-card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 14px 16px; margin-bottom: 10px;
-  }
-  .list-card .row1 { display: flex; justify-content: space-between; align-items: center; }
-  .list-card .name { font-family: var(--font-display); font-size: 1.05rem; }
-  .list-card .stage-tag {
-    font-family: var(--font-mono); font-size: 0.68rem; color: var(--brass);
-    letter-spacing: 0.06em; text-transform: uppercase;
-  }
-  .list-card .sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 3px; }
-
-  /* ---- Detail / edit panel ---- */
-  .back-link {
-    background: none; border: none; color: var(--text-muted);
-    font-size: 0.85rem; padding: 6px 0; margin-bottom: 10px;
-  }
-
-  .stage-rail { margin: 6px 0 4px; }
-  .stage-rail .node-wrap { cursor: pointer; }
-
-  .section-title {
-    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--text-dim);
-    margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--line);
-  }
-  .section-title:first-of-type { border-top: none; margin-top: 18px; }
-
-  .note-item {
-    border-left: 2px solid var(--line-bright); padding: 6px 0 6px 12px; margin-bottom: 8px;
-  }
-  .note-item .note-time {
-    font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-dim);
-  }
-  .note-item .note-text { font-size: 0.86rem; margin-top: 2px; }
-
-  .save-bar {
-    position: sticky; bottom: 0; background: var(--bg);
-    padding: 14px 0 4px; margin-top: 20px; border-top: 1px solid var(--line);
-    display: flex; gap: 10px;
-  }
-  .save-bar .btn { flex: 1; margin-top: 0; }
-
-  #saveStatus { font-size: 0.75rem; color: var(--teal); text-align: center; margin-top: 8px; min-height: 1em; }
-
-  .hidden { display: none !important; }
+  textarea { resize:vertical; min-height:60px; }
+  .field-row { display:flex; gap:10px; }
+  .field-row > div { flex:1; }
+  .btn { display:inline-block; border:none; border-radius:4px; padding:11px 18px; font-size:.9rem; font-weight:500; font-family:var(--font-body); }
+  .btn-primary { background:var(--brass); color:#16130A; width:100%; margin-top:18px; }
+  .btn-secondary { background:transparent; border:1px solid var(--line-bright); color:var(--text-muted); }
+  .btn-block { width:100%; }
+  .error-msg { color:#E08B77; font-size:.82rem; margin-top:10px; min-height:1em; }
+  .add-btn { width:100%; background:var(--surface); border:1px dashed var(--line-bright); color:var(--text-muted); border-radius:var(--radius); padding:14px; font-size:.9rem; margin-bottom:10px; }
+  .sort-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .sort-row label { margin:0; white-space:nowrap; font-family:var(--font-mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; }
+  .sort-row select { padding:8px 10px; font-size:.82rem; }
+  .list-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; }
+  .list-card .row1 { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .list-card .name { font-family:var(--font-display); font-size:1.05rem; }
+  .list-card .right-tags { display:flex; gap:6px; align-items:center; }
+  .list-card .stage-tag { font-family:var(--font-mono); font-size:.68rem; color:var(--brass); letter-spacing:.06em; text-transform:uppercase; }
+  .precedence-tag { font-family:var(--font-mono); font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--line-bright); border-radius:3px; padding:2px 5px; color:var(--text-muted); }
+  .precedence-tag.high { color:var(--brass); border-color:var(--brass); }
+  .precedence-tag.medium { color:var(--teal); border-color:var(--teal); }
+  .list-card .sub { font-size:.78rem; color:var(--text-dim); margin-top:3px; }
+  .back-link { background:none; border:none; color:var(--text-muted); font-size:.85rem; padding:6px 0; margin-bottom:10px; }
+  .stage-rail { margin:6px 0 4px; }
+  .stage-rail .node-wrap { cursor:pointer; }
+  .section-title { font-family:var(--font-mono); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin:24px 0 8px; padding-top:14px; border-top:1px solid var(--line); }
+  .section-title:first-of-type { border-top:none; margin-top:18px; }
+  .helper { color:var(--text-dim); font-size:.72rem; line-height:1.4; margin-top:5px; }
+  .note-item { border-left:2px solid var(--line-bright); padding:6px 0 6px 12px; margin-bottom:8px; }
+  .note-item .note-time { font-family:var(--font-mono); font-size:.66rem; color:var(--text-dim); }
+  .note-item .note-text { font-size:.86rem; margin-top:2px; }
+  .save-bar { position:sticky; bottom:0; background:var(--bg); padding:14px 0 4px; margin-top:20px; border-top:1px solid var(--line); display:flex; gap:10px; }
+  .save-bar .btn { flex:1; margin-top:0; }
+  #saveStatus { font-size:.75rem; color:var(--teal); text-align:center; margin-top:8px; min-height:1em; }
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
-
-<!-- ===================== LOGIN ===================== -->
 <div id="loginScreen">
   <div class="login-card">
     <p class="eyebrow">APPLEMDT · Tracker</p>
@@ -131,48 +71,48 @@
   </div>
 </div>
 
-<!-- ===================== LIST ===================== -->
 <div id="listScreen" class="wrap hidden">
   <header class="top">
     <h1>Applicants</h1>
     <button id="signOutBtn">Sign out</button>
   </header>
   <button class="add-btn" id="addBtn">+ New applicant</button>
-  <div id="listContainer">
-    <div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div>
+  <div class="sort-row">
+    <label for="sortMode">Sort</label>
+    <select id="sortMode">
+      <option value="precedence">Precedence</option>
+      <option value="updated">Recently updated</option>
+      <option value="name">Name A–Z</option>
+    </select>
   </div>
+  <div id="listContainer"><div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div></div>
 </div>
 
-<!-- ===================== DETAIL / EDIT ===================== -->
 <div id="detailScreen" class="wrap hidden">
   <button class="back-link" id="backBtn">‹ Back to list</button>
-
   <div class="stage-rail" id="stageRail"></div>
 
   <div class="section-title">Identity</div>
   <label for="f_name">Name</label>
   <input type="text" id="f_name">
   <div class="field-row">
-    <div>
-      <label for="f_phone">Phone</label>
-      <input type="text" id="f_phone">
-    </div>
-    <div>
-      <label for="f_email">Email</label>
-      <input type="text" id="f_email">
-    </div>
+    <div><label for="f_phone">Phone</label><input type="text" id="f_phone"></div>
+    <div><label for="f_email">Email</label><input type="text" id="f_email"></div>
   </div>
+
+  <div class="section-title">Recruiter precedence</div>
+  <label for="f_precedence">Precedence</label>
+  <select id="f_precedence">
+    <option value="normal">Normal</option>
+    <option value="medium">Medium</option>
+    <option value="high">High</option>
+  </select>
+  <div class="helper">Manual recruiter priority for organizing the applicant list. High precedence appears first.</div>
 
   <div class="section-title">APPLEMDT</div>
   <div class="field-row">
-    <div>
-      <label for="f_age">Age</label>
-      <input type="number" id="f_age">
-    </div>
-    <div>
-      <label for="f_priorService">Prior service</label>
-      <input type="text" id="f_priorService" placeholder="None / branch + status">
-    </div>
+    <div><label for="f_age">Age</label><input type="number" id="f_age"></div>
+    <div><label for="f_priorService">Prior service</label><input type="text" id="f_priorService" placeholder="None / branch + status"></div>
   </div>
   <label for="f_physicalHealth">Physical health (meds, surgeries)</label>
   <textarea id="f_physicalHealth"></textarea>
@@ -181,31 +121,15 @@
   <div class="field-row">
     <div>
       <label for="f_educationLevel">Education level</label>
-      <select id="f_educationLevel">
-        <option value="">—</option>
-        <option>HS Diploma</option>
-        <option>GED</option>
-        <option>Some College</option>
-        <option>Degree</option>
-      </select>
+      <select id="f_educationLevel"><option value="">—</option><option>HS Diploma</option><option>GED</option><option>Some College</option><option>Degree</option></select>
     </div>
     <div>
       <label for="f_maritalStatus">Marital status</label>
-      <select id="f_maritalStatus">
-        <option value="">—</option>
-        <option>Single</option>
-        <option>Married</option>
-        <option>Divorced</option>
-        <option>Other</option>
-      </select>
+      <select id="f_maritalStatus"><option value="">—</option><option>Single</option><option>Married</option><option>Divorced</option><option>Other</option></select>
     </div>
   </div>
   <div class="field-row">
-    <div>
-      <label for="f_dependents">Dependents</label>
-      <input type="number" id="f_dependents" value="0">
-    </div>
-    <div></div>
+    <div><label for="f_dependents">Dependents</label><input type="number" id="f_dependents" value="0"></div><div></div>
   </div>
   <label for="f_tattoos">Tattoos / brands / piercings</label>
   <textarea id="f_tattoos" placeholder="Location + description"></textarea>
@@ -213,23 +137,8 @@
   <div class="section-title hidden" id="waiverSection">Waiver</div>
   <div id="waiverFields" class="hidden">
     <div class="field-row">
-      <div>
-        <label for="f_waiverType">Type</label>
-        <select id="f_waiverType">
-          <option value="">—</option>
-          <option>Medical</option>
-          <option>Suitability</option>
-        </select>
-      </div>
-      <div>
-        <label for="f_waiverStatus">Status</label>
-        <select id="f_waiverStatus">
-          <option value="">—</option>
-          <option>Pending</option>
-          <option>Approved</option>
-          <option>Denied</option>
-        </select>
-      </div>
+      <div><label for="f_waiverType">Type</label><select id="f_waiverType"><option value="">—</option><option>Medical</option><option>Suitability</option></select></div>
+      <div><label for="f_waiverStatus">Status</label><select id="f_waiverStatus"><option value="">—</option><option>Pending</option><option>Approved</option><option>Denied</option></select></div>
     </div>
   </div>
 
@@ -237,10 +146,7 @@
   <div id="notesList"></div>
   <textarea id="newNoteText" placeholder="Add a status note…"></textarea>
   <button class="btn btn-secondary btn-block" id="addNoteBtn" style="margin-top:8px;">Add note</button>
-
-  <div class="save-bar">
-    <button class="btn btn-primary" id="saveBtn">Save changes</button>
-  </div>
+  <div class="save-bar"><button class="btn btn-primary" id="saveBtn">Save changes</button></div>
   <div id="saveStatus"></div>
 </div>
 
@@ -251,10 +157,10 @@
     STAGES, STAGE_SHORT, needsReview
   } from './firebase-config.js';
 
-  // ---------- Screens ----------
   const loginScreen = document.getElementById('loginScreen');
   const listScreen = document.getElementById('listScreen');
   const detailScreen = document.getElementById('detailScreen');
+  const sortMode = document.getElementById('sortMode');
 
   function showScreen(name) {
     loginScreen.classList.toggle('hidden', name !== 'login');
@@ -262,40 +168,55 @@
     detailScreen.classList.toggle('hidden', name !== 'detail');
   }
 
-  // ---------- Auth ----------
   document.getElementById('loginBtn').addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
     const pass = document.getElementById('loginPass').value;
     const errEl = document.getElementById('loginError');
     errEl.textContent = '';
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-    } catch (e) {
-      errEl.textContent = 'Sign-in failed — check email and password.';
-    }
+    try { await signInWithEmailAndPassword(auth, email, pass); }
+    catch (e) { errEl.textContent = 'Sign-in failed — check email and password.'; }
   });
-
   document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
 
   let applicants = [];
   let unsubscribeApplicants = null;
 
   onAuthStateChanged(auth, (user) => {
-    if (user) {
-      showScreen('list');
-      subscribeApplicants();
-    } else {
-      showScreen('login');
-      if (unsubscribeApplicants) unsubscribeApplicants();
-    }
+    if (user) { showScreen('list'); subscribeApplicants(); }
+    else { showScreen('login'); if (unsubscribeApplicants) unsubscribeApplicants(); }
   });
 
-  // ---------- List ----------
   function subscribeApplicants() {
     const q = query(collection(db, 'applicants'), orderBy('updatedAt', 'desc'));
     unsubscribeApplicants = onSnapshot(q, (snap) => {
       applicants = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderList();
+    });
+  }
+
+  function precedenceRank(value) {
+    return value === 'high' ? 3 : value === 'medium' ? 2 : 1;
+  }
+
+  function timestampMillis(value) {
+    if (!value) return 0;
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.seconds === 'number') return value.seconds * 1000;
+    return 0;
+  }
+
+  function sortedApplicants() {
+    const docs = [...applicants];
+    if (sortMode.value === 'name') {
+      return docs.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    if (sortMode.value === 'updated') {
+      return docs.sort((a,b) => timestampMillis(b.updatedAt) - timestampMillis(a.updatedAt));
+    }
+    return docs.sort((a,b) => {
+      const priority = precedenceRank(b.precedence) - precedenceRank(a.precedence);
+      if (priority !== 0) return priority;
+      return timestampMillis(b.updatedAt) - timestampMillis(a.updatedAt);
     });
   }
 
@@ -305,34 +226,32 @@
       container.innerHTML = `<div class="eyebrow" style="text-align:center;padding:30px 0;">No applicants yet</div>`;
       return;
     }
-    container.innerHTML = applicants.map(a => `
-      <div class="list-card" data-id="${a.id}">
-        <div class="row1">
-          <div class="name">${escapeHtml(a.name || 'Unnamed')}</div>
-          <div class="stage-tag">${STAGE_SHORT[a.statusStage] || ''}</div>
-        </div>
-        <div class="sub">${[a.age ? a.age + ' yo' : null, a.priorService].filter(Boolean).join(' · ')}</div>
-      </div>
-    `).join('');
-    container.querySelectorAll('.list-card').forEach(card => {
-      card.addEventListener('click', () => openDetail(card.dataset.id));
-    });
+    container.innerHTML = sortedApplicants().map(a => {
+      const precedence = a.precedence || 'normal';
+      const precedenceLabel = precedence === 'high' ? 'High' : precedence === 'medium' ? 'Medium' : 'Normal';
+      return `
+        <div class="list-card" data-id="${a.id}">
+          <div class="row1">
+            <div class="name">${escapeHtml(a.name || 'Unnamed')}</div>
+            <div class="right-tags">
+              <div class="precedence-tag ${precedence}">${precedenceLabel}</div>
+              <div class="stage-tag">${STAGE_SHORT[a.statusStage] || ''}</div>
+            </div>
+          </div>
+          <div class="sub">${[a.age ? a.age + ' yo' : null, a.priorService].filter(Boolean).join(' · ')}</div>
+        </div>`;
+    }).join('');
+    container.querySelectorAll('.list-card').forEach(card => card.addEventListener('click', () => openDetail(card.dataset.id)));
   }
 
+  sortMode.addEventListener('change', renderList);
   document.getElementById('addBtn').addEventListener('click', () => openDetail(null));
-  document.getElementById('backBtn').addEventListener('click', () => {
-    showScreen('list');
-    currentId = null;
-  });
+  document.getElementById('backBtn').addEventListener('click', () => { showScreen('list'); currentId = null; });
 
-  // ---------- Detail / edit ----------
   let currentId = null;
   let currentStage = STAGES[0];
   let currentNotes = [];
   let unsubscribeNotes = null;
-
-  const fieldIds = ['name','phone','email','age','priorService','physicalHealth',
-    'legalIssues','educationLevel','maritalStatus','dependents','tattoos','waiverType','waiverStatus'];
 
   function fieldEl(id) { return document.getElementById('f_' + id); }
 
@@ -340,10 +259,10 @@
     currentId = id;
     const a = id ? applicants.find(x => x.id === id) : {};
     currentStage = (a && a.statusStage) || STAGES[0];
-
     fieldEl('name').value = a?.name || '';
     fieldEl('phone').value = a?.phone || '';
     fieldEl('email').value = a?.email || '';
+    fieldEl('precedence').value = a?.precedence || 'normal';
     fieldEl('age').value = a?.age ?? '';
     fieldEl('priorService').value = a?.priorService || '';
     fieldEl('physicalHealth').value = a?.physicalHealth || '';
@@ -354,25 +273,15 @@
     fieldEl('tattoos').value = a?.tattoosBrandsPiercings || '';
     fieldEl('waiverType').value = a?.waiverType || '';
     fieldEl('waiverStatus').value = a?.waiverStatus || '';
-
     renderStageRail();
     toggleWaiverFields();
-
     document.getElementById('newNoteText').value = '';
     document.getElementById('saveStatus').textContent = '';
-
     if (unsubscribeNotes) unsubscribeNotes();
     if (currentId) {
       const nq = query(collection(db, 'applicants', currentId, 'notes'), orderBy('createdAt', 'desc'));
-      unsubscribeNotes = onSnapshot(nq, (snap) => {
-        currentNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderNotes();
-      });
-    } else {
-      currentNotes = [];
-      renderNotes();
-    }
-
+      unsubscribeNotes = onSnapshot(nq, (snap) => { currentNotes = snap.docs.map(d => ({ id:d.id, ...d.data() })); renderNotes(); });
+    } else { currentNotes = []; renderNotes(); }
     showScreen('detail');
   }
 
@@ -381,22 +290,12 @@
     const currentIdx = STAGES.indexOf(currentStage);
     rail.innerHTML = STAGES.map((stage, i) => {
       let cls = '';
-      if (i < currentIdx) cls = 'done';
-      else if (i === currentIdx) cls = 'current';
-      return `
-        <div class="node-wrap ${cls}" data-stage="${stage}">
-          <div class="track"></div>
-          <div class="dot"></div>
-          <div class="label">${STAGE_SHORT[stage]}</div>
-        </div>`;
+      if (i < currentIdx) cls = 'done'; else if (i === currentIdx) cls = 'current';
+      return `<div class="node-wrap ${cls}" data-stage="${stage}"><div class="track"></div><div class="dot"></div><div class="label">${STAGE_SHORT[stage]}</div></div>`;
     }).join('');
-    rail.querySelectorAll('.node-wrap').forEach(node => {
-      node.addEventListener('click', () => {
-        currentStage = node.dataset.stage;
-        renderStageRail();
-        toggleWaiverFields();
-      });
-    });
+    rail.querySelectorAll('.node-wrap').forEach(node => node.addEventListener('click', () => {
+      currentStage = node.dataset.stage; renderStageRail(); toggleWaiverFields();
+    }));
   }
 
   function toggleWaiverFields() {
@@ -407,38 +306,24 @@
 
   function renderNotes() {
     const el = document.getElementById('notesList');
-    if (currentNotes.length === 0) {
-      el.innerHTML = `<div class="eyebrow" style="padding:6px 0;">No notes yet</div>`;
-      return;
-    }
-    el.innerHTML = currentNotes.map(n => `
-      <div class="note-item">
-        <div class="note-time">${formatTime(n.createdAt)}</div>
-        <div class="note-text">${escapeHtml(n.text)}</div>
-      </div>
-    `).join('');
+    if (currentNotes.length === 0) { el.innerHTML = `<div class="eyebrow" style="padding:6px 0;">No notes yet</div>`; return; }
+    el.innerHTML = currentNotes.map(n => `<div class="note-item"><div class="note-time">${formatTime(n.createdAt)}</div><div class="note-text">${escapeHtml(n.text)}</div></div>`).join('');
   }
 
   function formatTime(ts) {
     if (!ts || !ts.toDate) return '';
-    return ts.toDate().toLocaleString('en-US', {
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-    });
+    return ts.toDate().toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
   }
 
-  function escapeHtml(str) {
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-  }
+  function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
-  // ---------- Save ----------
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const statusEl = document.getElementById('saveStatus');
     const payload = {
       name: fieldEl('name').value.trim(),
       phone: fieldEl('phone').value.trim(),
       email: fieldEl('email').value.trim(),
+      precedence: fieldEl('precedence').value || 'normal',
       age: fieldEl('age').value ? Number(fieldEl('age').value) : null,
       priorService: fieldEl('priorService').value.trim(),
       physicalHealth: fieldEl('physicalHealth').value.trim(),
@@ -453,15 +338,10 @@
       updatedAt: serverTimestamp()
     };
     payload.flagNeedsReview = needsReview(payload);
-
     try {
-      if (currentId) {
-        await updateDoc(doc(db, 'applicants', currentId), payload);
-      } else {
-        payload.createdAt = serverTimestamp();
-        const ref = await addDoc(collection(db, 'applicants'), payload);
-        currentId = ref.id;
-      }
+      if (currentId) await updateDoc(doc(db, 'applicants', currentId), payload);
+      else { payload.createdAt = serverTimestamp(); const ref = await addDoc(collection(db, 'applicants'), payload); currentId = ref.id; }
+      statusEl.style.color = '';
       statusEl.textContent = 'Saved.';
       setTimeout(() => { statusEl.textContent = ''; }, 2000);
     } catch (e) {
@@ -471,32 +351,17 @@
     }
   });
 
-  // ---------- Notes ----------
   document.getElementById('addNoteBtn').addEventListener('click', async () => {
     const textEl = document.getElementById('newNoteText');
     const text = textEl.value.trim();
     if (!text) return;
-
-    if (!currentId) {
-      document.getElementById('saveStatus').textContent = 'Save the applicant first, then add notes.';
-      return;
-    }
-
+    if (!currentId) { document.getElementById('saveStatus').textContent = 'Save the applicant first, then add notes.'; return; }
     try {
-      await addDoc(collection(db, 'applicants', currentId, 'notes'), {
-        text,
-        createdAt: serverTimestamp()
-      });
-      await updateDoc(doc(db, 'applicants', currentId), {
-        latestNote: text,
-        updatedAt: serverTimestamp()
-      });
+      await addDoc(collection(db, 'applicants', currentId, 'notes'), { text, createdAt:serverTimestamp() });
+      await updateDoc(doc(db, 'applicants', currentId), { latestNote:text, updatedAt:serverTimestamp() });
       textEl.value = '';
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   });
 </script>
-
 </body>
 </html>
