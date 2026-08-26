@@ -16,10 +16,9 @@
   }
 
   .board-header {
-    display: grid;
-    grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr) minmax(220px, 1fr);
+    display: flex;
     align-items: center;
-    gap: 28px;
+    justify-content: space-between;
     margin-bottom: 22px;
     padding-bottom: 18px;
     border-bottom: 2px solid var(--brass-dim);
@@ -56,28 +55,34 @@
   .verse-banner {
     font-family: var(--font-mono);
     color: var(--text-dim);
-    font-size: 0.60rem;
+    font-size: 0.85rem;
     text-align: center;
-    line-height: 1.45;
-    letter-spacing: 0.025em;
-    max-width: 540px;
-    margin: 0 auto;
-    padding: 0 14px;
-    opacity: 0.9;
-  }
-  .verse-banner .reference {
-    display: block;
-    margin-top: 3px;
-    color: var(--text-muted);
-    font-size: 0.56rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    margin: 0 auto 16px;
+    max-width: 820px;
+    line-height: 1.5;
   }
 
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 14px;
+    overflow: hidden;
+  }
+
+  .page-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .page-dots .dot-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--line-bright);
+  }
+  .page-dots .dot-pip.active {
+    background: var(--brass);
   }
 
   .card {
@@ -142,6 +147,7 @@
 <body>
 
 <div class="board">
+  <div class="verse-banner">"So I prophesied as he commanded me, and the breath came into them, and they lived and stood on their feet, an exceedingly great army." — Ezekiel 37:10 ESV</div>
   <div class="board-header">
     <div class="titles">
       <img src="angrr-seal.png" alt="Army National Guard Recruiting and Retention" class="seal">
@@ -150,12 +156,6 @@
         <h1>Applicant Board</h1>
       </div>
     </div>
-
-    <div class="verse-banner">
-      “So I prophesied as he commanded me, and the breath came into them, and they lived and stood on their feet, an exceedingly great army.”
-      <span class="reference">Ezekiel 37:10 · ESV</span>
-    </div>
-
     <div style="text-align:right;">
       <div class="count" id="count">— applicants</div>
       <div class="clock" id="clock"></div>
@@ -165,6 +165,7 @@
   <div class="grid" id="grid">
     <div class="empty-state">Loading board…</div>
   </div>
+  <div class="page-dots" id="pageDots"></div>
 </div>
 
 <script type="module">
@@ -237,15 +238,78 @@
   }
 
   const q = query(collection(db, 'applicants'), orderBy('updatedAt', 'desc'));
+
+  let allDocs = [];
+  let pages = [];
+  let currentPage = 0;
+  let cycleTimer = null;
+  const PAGE_SECONDS = 12;
+
+  function measurePageSize() {
+    // Render a probe card to measure actual card + gap dimensions at current screen size
+    grid.innerHTML = renderCard(allDocs[0]);
+    const probeCard = grid.querySelector('.card');
+    const gridRect = grid.getBoundingClientRect();
+    const cardRect = probeCard.getBoundingClientRect();
+    const styles = getComputedStyle(grid);
+    const gap = parseFloat(styles.gap) || 14;
+
+    const availableHeight = window.innerHeight - gridRect.top - 24; // leave bottom margin for dots
+    const cols = Math.max(1, Math.floor((gridRect.width + gap) / (cardRect.width + gap)));
+    const rows = Math.max(1, Math.floor((availableHeight + gap) / (cardRect.height + gap)));
+
+    return Math.max(1, cols * rows);
+  }
+
+  function paginate() {
+    if (allDocs.length === 0) { pages = []; return; }
+    const pageSize = measurePageSize();
+    pages = [];
+    for (let i = 0; i < allDocs.length; i += pageSize) {
+      pages.push(allDocs.slice(i, i + pageSize));
+    }
+    currentPage = 0;
+    renderPage();
+    setupCycle();
+  }
+
+  function renderPage() {
+    const pageDocs = pages[currentPage] || [];
+    grid.innerHTML = pageDocs.map(renderCard).join('');
+
+    const dotsEl = document.getElementById('pageDots');
+    if (pages.length <= 1) {
+      dotsEl.innerHTML = '';
+    } else {
+      dotsEl.innerHTML = pages.map((_, i) =>
+        `<div class="dot-pip ${i === currentPage ? 'active' : ''}"></div>`
+      ).join('');
+    }
+  }
+
+  function setupCycle() {
+    if (cycleTimer) clearInterval(cycleTimer);
+    if (pages.length <= 1) return;
+    cycleTimer = setInterval(() => {
+      currentPage = (currentPage + 1) % pages.length;
+      renderPage();
+    }, PAGE_SECONDS * 1000);
+  }
+
+  window.addEventListener('resize', () => { if (allDocs.length) paginate(); });
+
   onSnapshot(q, (snapshot) => {
     if (snapshot.empty) {
+      allDocs = [];
+      if (cycleTimer) clearInterval(cycleTimer);
       grid.innerHTML = `<div class="empty-state">No applicants yet</div>`;
+      document.getElementById('pageDots').innerHTML = '';
       countEl.textContent = '0 applicants';
       return;
     }
-    const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    countEl.textContent = `${docs.length} applicant${docs.length === 1 ? '' : 's'}`;
-    grid.innerHTML = docs.map(renderCard).join('');
+    allDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    countEl.textContent = `${allDocs.length} applicant${allDocs.length === 1 ? '' : 's'}`;
+    paginate();
   }, (err) => {
     grid.innerHTML = `<div class="empty-state">Connection error — check MiFi / network</div>`;
     console.error(err);
