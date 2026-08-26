@@ -45,7 +45,7 @@ export const STAGES = [
   "Processing Authorized",
   "Processing Scheduled",
   "Waiver",
-  "DEP",
+  "Q&E",
   "Enlisted"
 ];
 
@@ -55,7 +55,8 @@ export const STAGE_SHORT = {
   "Processing Authorized": "AUTH'D",
   "Processing Scheduled": "SCHED",
   "Waiver": "WAIVER",
-  "DEP": "DEP",
+  "Q&E": "Q&E",
+  "DEP": "Q&E",
   "Enlisted": "ENLISTED"
 };
 
