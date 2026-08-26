@@ -8,24 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
-  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+  body { overflow: hidden; }
 
   .board {
-    padding: 14px 20px 14px;
-    height: 100vh;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
+    padding: 28px 32px;
+    min-height: 100vh;
   }
 
   .board-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
+    margin-bottom: 22px;
+    padding-bottom: 18px;
     border-bottom: 2px solid var(--brass-dim);
-    flex: 0 0 auto;
   }
   .board-header .titles {
     display: flex;
@@ -33,15 +29,14 @@
     gap: 16px;
   }
   .board-header .seal {
-    width: 42px;
-    height: 42px;
+    width: 56px;
+    height: 56px;
     flex-shrink: 0;
-    object-fit: contain;
   }
   .board-header h1 {
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 1.55rem;
+    font-size: 1.9rem;
     letter-spacing: 0.02em;
     margin: 0;
     color: var(--text);
@@ -60,31 +55,24 @@
   .verse-banner {
     font-family: var(--font-mono);
     color: var(--text-dim);
-    font-size: 0.68rem;
+    font-size: 0.85rem;
     text-align: center;
-    margin: 0 auto 7px;
-    max-width: 900px;
-    line-height: 1.25;
-    flex: 0 0 auto;
+    margin: 0 auto 16px;
+    max-width: 820px;
+    line-height: 1.5;
   }
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-    flex: 1 1 auto;
-    min-height: 0;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 14px;
   }
 
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 8px 10px;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
+    padding: 16px 18px;
   }
   .card.flagged { border-color: var(--rust-dim); }
 
@@ -96,7 +84,7 @@
   }
   .card-top .name {
     font-family: var(--font-display);
-    font-size: 0.98rem;
+    font-size: 1.15rem;
     font-weight: 500;
     color: var(--text);
   }
@@ -104,29 +92,21 @@
 
   .meta-line {
     font-family: var(--font-mono);
-    font-size: 0.50rem;
+    font-size: 0.72rem;
     color: var(--text-dim);
-    margin-bottom: 3px;
+    margin-bottom: 14px;
     letter-spacing: 0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  .card .stage-rail { margin: 2px 0 2px; }
-  .card .stage-rail .label { font-size: 0.48rem; }
-  .card .stage-rail .dot { width: 8px; height: 8px; }
+  .card .stage-rail { margin: 10px 0 12px; }
 
   .latest-note {
-    font-size: 0.64rem;
+    font-size: 0.82rem;
     color: var(--text-muted);
     border-top: 1px solid var(--line);
-    padding-top: 3px;
-    margin-top: 1px;
-    line-height: 1.15;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding-top: 10px;
+    margin-top: 2px;
+    line-height: 1.4;
   }
   .latest-note .note-label {
     font-family: var(--font-mono);
