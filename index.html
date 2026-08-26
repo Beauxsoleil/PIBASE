@@ -99,6 +99,15 @@
     <div><label for="f_phone">Phone</label><input type="text" id="f_phone"></div>
     <div><label for="f_email">Email</label><input type="text" id="f_email"></div>
   </div>
+  <label for="f_generalArea">General area</label>
+  <select id="f_generalArea">
+    <option value="">— Select area —</option>
+    <option value="Twin Falls">Twin Falls</option>
+    <option value="Burley">Burley</option>
+    <option value="Rupert">Rupert</option>
+    <option value="Filer">Filer</option>
+    <option value="Other">Other</option>
+  </select>
 
   <div class="section-title">Recruiter precedence</div>
   <label for="f_precedence">Precedence</label>
@@ -238,7 +247,7 @@
               <div class="stage-tag">${STAGE_SHORT[a.statusStage] || ''}</div>
             </div>
           </div>
-          <div class="sub">${[a.age ? a.age + ' yo' : null, a.priorService].filter(Boolean).join(' · ')}</div>
+          <div class="sub">${[a.generalArea || null, a.age ? a.age + ' yo' : null, a.priorService].filter(Boolean).join(' · ')}</div>
         </div>`;
     }).join('');
     container.querySelectorAll('.list-card').forEach(card => card.addEventListener('click', () => openDetail(card.dataset.id)));
@@ -262,6 +271,7 @@
     fieldEl('name').value = a?.name || '';
     fieldEl('phone').value = a?.phone || '';
     fieldEl('email').value = a?.email || '';
+    fieldEl('generalArea').value = a?.generalArea || '';
     fieldEl('precedence').value = a?.precedence || 'normal';
     fieldEl('age').value = a?.age ?? '';
     fieldEl('priorService').value = a?.priorService || '';
@@ -323,6 +333,7 @@
       name: fieldEl('name').value.trim(),
       phone: fieldEl('phone').value.trim(),
       email: fieldEl('email').value.trim(),
+      generalArea: fieldEl('generalArea').value,
       precedence: fieldEl('precedence').value || 'normal',
       age: fieldEl('age').value ? Number(fieldEl('age').value) : null,
       priorService: fieldEl('priorService').value.trim(),
