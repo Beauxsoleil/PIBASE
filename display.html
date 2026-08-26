@@ -8,96 +8,83 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
-  html, body {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    overflow: hidden;
-  }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
   .board {
+    padding: 14px 20px 14px;
     height: 100vh;
     box-sizing: border-box;
-    padding: 12px 22px 14px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-  }
-
-  .verse-banner {
-    flex: 0 0 auto;
-    font-family: var(--font-mono);
-    color: var(--text-dim);
-    font-size: 0.7rem;
-    text-align: center;
-    margin: 0 auto 7px;
-    max-width: 900px;
-    line-height: 1.25;
   }
 
   .board-header {
-    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
     padding-bottom: 8px;
     border-bottom: 2px solid var(--brass-dim);
+    flex: 0 0 auto;
   }
   .board-header .titles {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 16px;
   }
   .board-header .seal {
-    width: 40px;
-    height: 40px;
-    object-fit: contain;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
+    object-fit: contain;
   }
   .board-header h1 {
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 1.5rem;
+    font-size: 1.55rem;
     letter-spacing: 0.02em;
     margin: 0;
     color: var(--text);
-    line-height: 1;
-  }
-  .board-header .eyebrow {
-    font-size: 0.58rem;
-    margin-bottom: 2px;
   }
   .board-header .count {
     font-family: var(--font-mono);
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: 0.95rem;
   }
   .clock {
     font-family: var(--font-mono);
     color: var(--text-dim);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
+  }
+
+  .verse-banner {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    text-align: center;
+    margin: 0 auto 7px;
+    max-width: 900px;
+    line-height: 1.25;
+    flex: 0 0 auto;
   }
 
   .grid {
-    flex: 1 1 auto;
-    min-height: 0;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(4, minmax(0, 1fr));
     gap: 7px;
-    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .card {
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 8px 10px;
-    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
   .card.flagged { border-color: var(--rust-dim); }
 
@@ -105,76 +92,57 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 6px;
-    margin-bottom: 1px;
+    margin-bottom: 4px;
   }
   .card-top .name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-family: var(--font-display);
-    font-size: 0.95rem;
-    line-height: 1.05;
+    font-size: 0.98rem;
     font-weight: 500;
     color: var(--text);
   }
-  .badges {
-    display: flex;
-    gap: 3px;
-    flex-shrink: 0;
-  }
-  .badge {
-    font-size: 0.54rem;
-    padding: 2px 4px;
-  }
+  .badges { display: flex; gap: 6px; }
 
   .meta-line {
-    min-height: 0.8rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: 0.50rem;
     color: var(--text-dim);
     margin-bottom: 3px;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .card .stage-rail { margin: 2px 0 1px; }
-  .card .stage-rail .label { font-size: 0.46rem; }
-  .card .stage-rail .dot {
-    width: 7px;
-    height: 7px;
-  }
+  .card .stage-rail { margin: 2px 0 2px; }
+  .card .stage-rail .label { font-size: 0.48rem; }
+  .card .stage-rail .dot { width: 8px; height: 8px; }
 
   .latest-note {
-    font-size: 0.62rem;
+    font-size: 0.64rem;
     color: var(--text-muted);
     border-top: 1px solid var(--line);
     padding-top: 3px;
     margin-top: 1px;
     line-height: 1.15;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
   .latest-note .note-label {
     font-family: var(--font-mono);
-    font-size: 0.48rem;
+    font-size: 0.62rem;
     color: var(--text-dim);
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     display: block;
-    margin-bottom: 1px;
+    margin-bottom: 3px;
   }
 
   .empty-state {
     color: var(--text-dim);
     font-family: var(--font-mono);
     text-align: center;
-    padding: 40px 20px;
+    padding: 80px 20px;
     font-size: 0.9rem;
   }
 </style>
