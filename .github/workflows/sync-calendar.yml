@@ -19,7 +19,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Fetch and slim published iCloud calendar
+      - name: Install calendar parser
+        run: python3 -m pip install --disable-pip-version-check 'icalendar>=6,<7' 'recurring-ical-events>=3,<4'
+
+      - name: Fetch, expand, and slim published iCloud calendar
         shell: bash
         run: |
           set -euo pipefail
@@ -31,64 +34,95 @@ jobs:
 
           grep -q 'BEGIN:VCALENDAR' calendar.full.ics
 
-          # The Pi kiosk only reads DTSTART, DTEND, SUMMARY and LOCATION.
-          # Strip Apple attachment/map metadata and old history before the file
-          # ever reaches the Pi. Keep 90 days behind and 370 days ahead so the
-          # weekly calendar can still be browsed meaningfully.
+          # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub's runner. The Pi
+          # receives only flattened event instances and four display fields.
           python3 - <<'PY'
-          from datetime import datetime, timedelta, timezone
+          from datetime import date, datetime, timedelta, timezone
           from pathlib import Path
-          import re
+          from zoneinfo import ZoneInfo
+          import icalendar
+          import recurring_ical_events
 
-          raw = Path('calendar.full.ics').read_text(encoding='utf-8', errors='replace')
-          logical = re.sub(r'\r?\n[ \t]', '', raw).splitlines()
+          source = Path('calendar.full.ics').read_bytes()
+          calendar = icalendar.Calendar.from_ical(source)
 
-          events = []
-          current = None
-          for line in logical:
-              if line == 'BEGIN:VEVENT':
-                  current = []
-              elif line == 'END:VEVENT':
-                  if current is not None:
-                      events.append(current)
-                  current = None
-              elif current is not None:
-                  current.append(line)
-
-          now = datetime.now(timezone.utc).replace(tzinfo=None)
+          now = datetime.now(timezone.utc)
           low = now - timedelta(days=90)
           high = now + timedelta(days=370)
-          keep_names = ('DTSTART', 'DTEND', 'SUMMARY', 'LOCATION')
-          out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PIBASE//Calendar Kiosk//EN']
+          instances = recurring_ical_events.of(calendar).between(low, high)
+          boise = ZoneInfo('America/Boise')
 
-          def start_date(lines):
-              for line in lines:
-                  if line.startswith('DTSTART') and ':' in line:
-                      value = line.split(':', 1)[1].strip()
-                      match = re.match(r'(\d{8})(?:T(\d{6}))?', value)
-                      if not match:
-                          return None
-                      fmt = '%Y%m%d%H%M%S' if match.group(2) else '%Y%m%d'
-                      text = match.group(1) + (match.group(2) or '')
-                      try:
-                          return datetime.strptime(text, fmt)
-                      except ValueError:
-                          return None
+          def clean_text(value):
+              text = str(value or '')
+              return (text.replace('\\', '\\\\')
+                          .replace('\r\n', '\\n')
+                          .replace('\n', '\\n')
+                          .replace(',', '\\,')
+                          .replace(';', '\\;'))
+
+          def date_line(name, value):
+              if isinstance(value, datetime):
+                  if value.tzinfo is None:
+                      local = value
+                  else:
+                      local = value.astimezone(boise).replace(tzinfo=None)
+                  return f'{name};TZID=America/Boise:{local:%Y%m%dT%H%M%S}'
+              if isinstance(value, date):
+                  return f'{name};VALUE=DATE:{value:%Y%m%d}'
               return None
 
-          for lines in events:
-              start = start_date(lines)
-              if start is None or start < low or start > high:
-                  continue
-              out.append('BEGIN:VEVENT')
-              for line in lines:
-                  name = line.split(';', 1)[0].split(':', 1)[0]
-                  if name in keep_names:
-                      out.append(line)
-              out.append('END:VEVENT')
+          def decoded(component, key):
+              try:
+                  return component.decoded(key)
+              except Exception:
+                  return None
 
+          rows = []
+          for event in instances:
+              start = decoded(event, 'DTSTART')
+              if start is None:
+                  continue
+              end = decoded(event, 'DTEND')
+              if end is None:
+                  duration = decoded(event, 'DURATION')
+                  if duration is not None:
+                      end = start + duration
+                  elif isinstance(start, datetime):
+                      end = start + timedelta(hours=1)
+                  else:
+                      end = start + timedelta(days=1)
+
+              summary = clean_text(event.get('SUMMARY', 'Untitled event'))
+              location = clean_text(event.get('LOCATION', ''))
+              start_line = date_line('DTSTART', start)
+              end_line = date_line('DTEND', end)
+              if not start_line:
+                  continue
+
+              lines = ['BEGIN:VEVENT', start_line]
+              if end_line:
+                  lines.append(end_line)
+              lines.append(f'SUMMARY:{summary}')
+              if location:
+                  lines.append(f'LOCATION:{location}')
+              lines.append('END:VEVENT')
+              rows.append((start, lines))
+
+          def sort_key(item):
+              value = item[0]
+              if isinstance(value, datetime):
+                  if value.tzinfo is None:
+                      return value.replace(tzinfo=boise).astimezone(timezone.utc)
+                  return value.astimezone(timezone.utc)
+              return datetime(value.year, value.month, value.day, tzinfo=boise).astimezone(timezone.utc)
+
+          rows.sort(key=sort_key)
+          out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PIBASE//Calendar Kiosk//EN']
+          for _, lines in rows:
+              out.extend(lines)
           out.append('END:VCALENDAR')
           Path('calendar.ics.tmp').write_text('\r\n'.join(out) + '\r\n', encoding='utf-8')
+          print(f'Published {len(rows)} flattened calendar event instances.')
           PY
 
           rm -f calendar.full.ics
