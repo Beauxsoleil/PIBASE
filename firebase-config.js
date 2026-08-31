@@ -75,10 +75,11 @@ export function needsReview(applicant) {
   );
 }
 
-// Add the Events entry point to the phone app and the fifth Events screen to
-// the kiosk without coupling those views into the shared data module itself.
+// Shared enhancement layer for recruiting events and mission compatibility.
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   import('./events-ui.js')
-    .then(({ initEventsUi }) => initEventsUi({ db, collection, onSnapshot, query, orderBy }))
+    .then(({ initEventsUi }) => initEventsUi({
+      db, collection, doc, updateDoc, serverTimestamp, onSnapshot, query, orderBy
+    }))
     .catch(error => console.warn('PIBASE events UI unavailable', error));
 }
