@@ -94,8 +94,11 @@
   .page-dots .dot-pip {
     width: 7px;
     height: 7px;
+    border: 0;
+    padding: 0;
     border-radius: 50%;
     background: var(--line-bright);
+    cursor: pointer;
   }
   .page-dots .dot-pip.active {
     background: var(--brass);
@@ -106,8 +109,18 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+    outline: none;
+  }
+  .card:hover,
+  .card:focus-visible {
+    border-color: var(--brass-dim);
+    background: var(--surface-raised, var(--surface));
   }
   .card.flagged { border-color: var(--rust-dim); }
+  .card.flagged:hover,
+  .card.flagged:focus-visible { border-color: var(--rust); }
 
   .card-top {
     display: flex;
@@ -158,6 +171,137 @@
     padding: 80px 20px;
     font-size: 0.9rem;
   }
+
+  .kiosk-hint {
+    min-height: 18px;
+    margin-top: 8px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    opacity: 0.72;
+  }
+
+  .detail-view {
+    display: none;
+  }
+  .detail-view.open {
+    display: block;
+  }
+  .board-content.hidden {
+    display: none;
+  }
+
+  .detail-shell {
+    max-width: 920px;
+    margin: 8px auto 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 24px 28px 20px;
+  }
+  .detail-topline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .detail-position {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .detail-name {
+    font-family: var(--font-display);
+    color: var(--text);
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.05;
+  }
+  .detail-badges {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .detail-meta {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin-bottom: 18px;
+  }
+  .detail-section {
+    margin-top: 18px;
+  }
+  .detail-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .detail-value {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+  .detail-note {
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .detail-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .detail-nav {
+    display: flex;
+    gap: 10px;
+  }
+  .detail-button {
+    appearance: none;
+    border: 1px solid var(--line-bright);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .detail-button:hover,
+  .detail-button:focus-visible {
+    border-color: var(--brass-dim);
+    color: var(--text);
+    outline: none;
+  }
+  .detail-shortcut {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 900px) {
+    .detail-shell { padding: 20px; }
+    .detail-name { font-size: 1.6rem; }
+  }
 </style>
 </head>
 <body>
@@ -183,10 +327,15 @@
     </div>
   </div>
 
-  <div class="grid" id="grid">
-    <div class="empty-state">Loading board…</div>
+  <div class="board-content" id="boardContent">
+    <div class="grid" id="grid">
+      <div class="empty-state">Loading board…</div>
+    </div>
+    <div class="page-dots" id="pageDots"></div>
+    <div class="kiosk-hint" id="kioskHint">← → pages · click applicant for details</div>
   </div>
-  <div class="page-dots" id="pageDots"></div>
+
+  <div class="detail-view" id="detailView" aria-live="polite"></div>
 </div>
 
 <script type="module">
@@ -196,6 +345,9 @@
   const grid = document.getElementById('grid');
   const countEl = document.getElementById('count');
   const clockEl = document.getElementById('clock');
+  const pageDotsEl = document.getElementById('pageDots');
+  const boardContent = document.getElementById('boardContent');
+  const detailView = document.getElementById('detailView');
 
   function tickClock() {
     const now = new Date();
@@ -227,21 +379,21 @@
     const badges = [];
     if (flagged) badges.push(`<span class="badge flag">Review</span>`);
     if (applicant.statusStage === 'Waiver' && applicant.waiverType) {
-      badges.push(`<span class="badge waiver">${applicant.waiverType}</span>`);
+      badges.push(`<span class="badge waiver">${escapeHtml(applicant.waiverType)}</span>`);
     }
 
     const meta = [
-      applicant.age ? `${applicant.age} yo` : null,
+      applicant.age ? `${escapeHtml(String(applicant.age))} yo` : null,
       applicant.priorService || null,
       applicant.educationLevel || null
-    ].filter(Boolean).join('  ·  ');
+    ].filter(Boolean).map(escapeHtml).join('  ·  ');
 
     const note = applicant.latestNote
       ? `<div class="latest-note"><span class="note-label">Latest note</span>${escapeHtml(applicant.latestNote)}</div>`
       : '';
 
     return `
-      <div class="card ${flagged ? 'flagged' : ''}">
+      <div class="card ${flagged ? 'flagged' : ''}" data-applicant-id="${escapeHtml(applicant.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(applicant.name || 'applicant')} details">
         <div class="card-top">
           <div class="name">${escapeHtml(applicant.name || 'Unnamed')}</div>
           <div class="badges">${badges.join('')}</div>
@@ -254,8 +406,29 @@
 
   function escapeHtml(str) {
     const d = document.createElement('div');
-    d.textContent = str;
+    d.textContent = str == null ? '' : String(str);
     return d.innerHTML;
+  }
+
+  function formatValue(value) {
+    return value == null || value === '' ? '—' : escapeHtml(String(value));
+  }
+
+  function applicantBadges(applicant) {
+    const badges = [];
+    if (needsReview(applicant)) badges.push(`<span class="badge flag">Review</span>`);
+    if (applicant.statusStage === 'Waiver' && applicant.waiverType) {
+      badges.push(`<span class="badge waiver">${escapeHtml(applicant.waiverType)}</span>`);
+    }
+    return badges.join('');
+  }
+
+  function detailMeta(applicant) {
+    return [
+      applicant.age ? `${applicant.age} yo` : null,
+      applicant.priorService || null,
+      applicant.educationLevel || null
+    ].filter(Boolean).map(v => escapeHtml(String(v))).join('  ·  ');
   }
 
   const q = query(collection(db, 'applicants'), orderBy('updatedAt', 'desc'));
@@ -264,31 +437,46 @@
   let pages = [];
   let currentPage = 0;
   let cycleTimer = null;
+  let selectedApplicantId = null;
   const PAGE_SECONDS = 12;
 
   function measurePageSize() {
+    if (!allDocs.length) return 1;
+
     grid.innerHTML = renderCard(allDocs[0]);
     const probeCard = grid.querySelector('.card');
+    if (!probeCard) return 1;
+
     const gridRect = grid.getBoundingClientRect();
     const cardRect = probeCard.getBoundingClientRect();
     const styles = getComputedStyle(grid);
     const gap = parseFloat(styles.gap) || 14;
 
-    const availableHeight = window.innerHeight - gridRect.top - 24;
+    const availableHeight = window.innerHeight - gridRect.top - 48;
     const cols = Math.max(1, Math.floor((gridRect.width + gap) / (cardRect.width + gap)));
     const rows = Math.max(1, Math.floor((availableHeight + gap) / (cardRect.height + gap)));
 
     return Math.max(1, cols * rows);
   }
 
-  function paginate() {
-    if (allDocs.length === 0) { pages = []; return; }
+  function paginate({ preservePage = true } = {}) {
+    if (allDocs.length === 0) {
+      pages = [];
+      currentPage = 0;
+      return;
+    }
+
+    const previousPage = currentPage;
     const pageSize = measurePageSize();
     pages = [];
     for (let i = 0; i < allDocs.length; i += pageSize) {
       pages.push(allDocs.slice(i, i + pageSize));
     }
-    currentPage = 0;
+
+    currentPage = preservePage
+      ? Math.min(previousPage, Math.max(0, pages.length - 1))
+      : 0;
+
     renderPage();
     setupCycle();
   }
@@ -297,40 +485,222 @@
     const pageDocs = pages[currentPage] || [];
     grid.innerHTML = pageDocs.map(renderCard).join('');
 
-    const dotsEl = document.getElementById('pageDots');
     if (pages.length <= 1) {
-      dotsEl.innerHTML = '';
+      pageDotsEl.innerHTML = '';
     } else {
-      dotsEl.innerHTML = pages.map((_, i) =>
-        `<div class="dot-pip ${i === currentPage ? 'active' : ''}"></div>`
+      pageDotsEl.innerHTML = pages.map((_, i) =>
+        `<button type="button" class="dot-pip ${i === currentPage ? 'active' : ''}" data-page-index="${i}" aria-label="Go to page ${i + 1}"${i === currentPage ? ' aria-current="page"' : ''}></button>`
       ).join('');
     }
   }
 
+  function goToPage(index, { resetTimer = true } = {}) {
+    if (pages.length <= 1) return;
+    currentPage = (index + pages.length) % pages.length;
+    renderPage();
+    if (resetTimer) setupCycle();
+  }
+
+  function nextPage() {
+    goToPage(currentPage + 1);
+  }
+
+  function previousPage() {
+    goToPage(currentPage - 1);
+  }
+
   function setupCycle() {
     if (cycleTimer) clearInterval(cycleTimer);
-    if (pages.length <= 1) return;
+    cycleTimer = null;
+    if (pages.length <= 1 || selectedApplicantId) return;
+
     cycleTimer = setInterval(() => {
-      currentPage = (currentPage + 1) % pages.length;
-      renderPage();
+      goToPage(currentPage + 1, { resetTimer: false });
     }, PAGE_SECONDS * 1000);
   }
 
-  window.addEventListener('resize', () => { if (allDocs.length) paginate(); });
+  function selectedIndex() {
+    return allDocs.findIndex(applicant => applicant.id === selectedApplicantId);
+  }
+
+  function openApplicant(id) {
+    if (!allDocs.some(applicant => applicant.id === id)) return;
+    selectedApplicantId = id;
+    if (cycleTimer) clearInterval(cycleTimer);
+    cycleTimer = null;
+    boardContent.classList.add('hidden');
+    detailView.classList.add('open');
+    renderApplicantDetail();
+  }
+
+  function closeApplicant() {
+    selectedApplicantId = null;
+    detailView.classList.remove('open');
+    detailView.innerHTML = '';
+    boardContent.classList.remove('hidden');
+    renderPage();
+    setupCycle();
+  }
+
+  function moveApplicant(direction) {
+    if (!allDocs.length || !selectedApplicantId) return;
+    const index = selectedIndex();
+    if (index < 0) {
+      selectedApplicantId = allDocs[0].id;
+    } else {
+      const nextIndex = (index + direction + allDocs.length) % allDocs.length;
+      selectedApplicantId = allDocs[nextIndex].id;
+    }
+    renderApplicantDetail();
+  }
+
+  function renderApplicantDetail() {
+    const index = selectedIndex();
+    if (index < 0) {
+      closeApplicant();
+      return;
+    }
+
+    const applicant = allDocs[index];
+    const meta = detailMeta(applicant);
+    const stage = applicant.statusStage || STAGES[0];
+    const latestNote = applicant.latestNote
+      ? `<div class="detail-section detail-note"><span class="detail-label">Latest note</span><div class="detail-value">${escapeHtml(applicant.latestNote)}</div></div>`
+      : '';
+
+    const area = applicant.generalArea || applicant.area || applicant.location || null;
+    const contactParts = [applicant.phone, applicant.email].filter(Boolean);
+    const contact = contactParts.length
+      ? contactParts.map(v => escapeHtml(String(v))).join('<br>')
+      : '—';
+
+    detailView.innerHTML = `
+      <div class="detail-shell">
+        <div class="detail-topline">
+          <div>
+            <div class="detail-position">Applicant ${index + 1} / ${allDocs.length}</div>
+            <div class="detail-name">${escapeHtml(applicant.name || 'Unnamed')}</div>
+          </div>
+          <div class="detail-badges">${applicantBadges(applicant)}</div>
+        </div>
+
+        <div class="detail-meta">${meta || 'Applicant record'}</div>
+
+        <div class="detail-section">
+          <span class="detail-label">Current stage</span>
+          ${renderStageRail(stage)}
+        </div>
+
+        <div class="detail-section">
+          <span class="detail-label">Contact</span>
+          <div class="detail-value">${contact}</div>
+        </div>
+
+        ${area ? `<div class="detail-section"><span class="detail-label">General area</span><div class="detail-value">${formatValue(area)}</div></div>` : ''}
+        ${latestNote}
+
+        <div class="detail-actions">
+          <div class="detail-nav">
+            <button type="button" class="detail-button" data-detail-action="previous">← Previous</button>
+            <button type="button" class="detail-button" data-detail-action="next">Next →</button>
+          </div>
+          <div class="detail-shortcut">← → applicants · Esc board</div>
+          <button type="button" class="detail-button" data-detail-action="close">Board</button>
+        </div>
+      </div>`;
+  }
+
+  grid.addEventListener('click', (event) => {
+    const card = event.target.closest('.card');
+    if (card) openApplicant(card.dataset.applicantId);
+  });
+
+  grid.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const card = event.target.closest('.card');
+    if (!card) return;
+    event.preventDefault();
+    openApplicant(card.dataset.applicantId);
+  });
+
+  pageDotsEl.addEventListener('click', (event) => {
+    const dot = event.target.closest('[data-page-index]');
+    if (!dot) return;
+    goToPage(Number(dot.dataset.pageIndex));
+  });
+
+  detailView.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-detail-action]')?.dataset.detailAction;
+    if (action === 'previous') moveApplicant(-1);
+    else if (action === 'next') moveApplicant(1);
+    else if (action === 'close') closeApplicant();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+
+    if (selectedApplicantId) {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        moveApplicant(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        moveApplicant(1);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeApplicant();
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      previousPage();
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      nextPage();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (allDocs.length && !selectedApplicantId) paginate({ preservePage: true });
+  });
 
   onSnapshot(q, (snapshot) => {
     if (snapshot.empty) {
       allDocs = [];
+      pages = [];
+      currentPage = 0;
       if (cycleTimer) clearInterval(cycleTimer);
+      cycleTimer = null;
+      selectedApplicantId = null;
+      detailView.classList.remove('open');
+      detailView.innerHTML = '';
+      boardContent.classList.remove('hidden');
       grid.innerHTML = `<div class="empty-state">No applicants yet</div>`;
-      document.getElementById('pageDots').innerHTML = '';
+      pageDotsEl.innerHTML = '';
       countEl.textContent = '0 applicants';
       return;
     }
+
+    const previousSelectedId = selectedApplicantId;
     allDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     countEl.textContent = `${allDocs.length} applicant${allDocs.length === 1 ? '' : 's'}`;
-    paginate();
+
+    if (previousSelectedId && allDocs.some(applicant => applicant.id === previousSelectedId)) {
+      selectedApplicantId = previousSelectedId;
+      renderApplicantDetail();
+    } else if (previousSelectedId) {
+      selectedApplicantId = null;
+      detailView.classList.remove('open');
+      detailView.innerHTML = '';
+      boardContent.classList.remove('hidden');
+      paginate({ preservePage: true });
+    } else {
+      paginate({ preservePage: true });
+    }
   }, (err) => {
+    if (selectedApplicantId) closeApplicant();
     grid.innerHTML = `<div class="empty-state">Connection error — check MiFi / network</div>`;
     console.error(err);
   });
