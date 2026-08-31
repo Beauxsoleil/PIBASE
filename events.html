@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>APPLEMDT — Events</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 80px}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}.top h1{font-family:var(--font-display);font-size:1.3rem;margin:0}.back{color:var(--text-muted);text-decoration:none;font-size:.85rem}.add{width:100%;background:var(--surface);border:1px dashed var(--line-bright);color:var(--text-muted);border-radius:var(--radius);padding:14px;font-size:.9rem;margin-bottom:14px}.event-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;cursor:pointer}.event-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.event-name{font-family:var(--font-display);font-size:1.05rem}.event-type{font-family:var(--font-mono);font-size:.62rem;color:var(--brass);text-transform:uppercase;letter-spacing:.06em}.event-meta{font-size:.76rem;color:var(--text-dim);margin-top:4px}.results{display:flex;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px;margin-top:8px;font-family:var(--font-mono);font-size:.64rem;color:var(--text-muted)}.hidden{display:none!important}label{display:block;font-size:.78rem;color:var(--text-muted);margin:14px 0 5px}input,select,textarea{width:100%;background:var(--bg-raised);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:10px 11px;font-size:.95rem}textarea{resize:vertical;min-height:70px}.field-row{display:flex;gap:10px}.field-row>div{flex:1;min-width:0}.section-title{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:24px 0 8px;padding-top:14px;border-top:1px solid var(--line)}.btn{border:none;border-radius:4px;padding:11px 18px;font-size:.9rem;font-family:var(--font-body)}.primary{background:var(--brass);color:#16130A;width:100%}.status{min-height:1em;text-align:center;font-size:.75rem;color:var(--teal);margin-top:8px}.empty{text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:.75rem;padding:30px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a class="back" href="index.html">‹ Applicants</a><h1>Recruiting Events</h1><span></span></div>
+  <div id="listView">
+    <button class="add" id="addEvent">+ New recruiting event</button>
+    <div id="eventList"><div class="empty">Loading events…</div></div>
+  </div>
+  <div id="editView" class="hidden">
+    <button class="back" id="backList" type="button">‹ Back to events</button>
+    <div class="section-title">Event</div>
+    <label for="eventName">Event name</label><input id="eventName" type="text" placeholder="Minico Career Fair">
+    <div class="field-row"><div><label for="eventDate">Date</label><input id="eventDate" type="date"></div><div><label for="eventType">Type</label><select id="eventType"><option>School Visit</option><option>Career Fair</option><option>Community Event</option><option>Presentation</option><option>Meeting</option><option>Other</option></select></div></div>
+    <label for="eventLocation">Location</label><input id="eventLocation" type="text" placeholder="Minico High School">
+    <label for="eventPoc">POC</label><input id="eventPoc" type="text" placeholder="Name / organization">
+    <label for="eventNotes">Planning notes</label><textarea id="eventNotes" placeholder="Setup, materials, audience, follow-up…"></textarea>
+
+    <div class="section-title">Results</div>
+    <div class="field-row"><div><label for="eventLeads">Leads</label><input id="eventLeads" type="number" min="0" value="0"></div><div><label for="eventAppointments">Appointments</label><input id="eventAppointments" type="number" min="0" value="0"></div></div>
+    <div class="field-row"><div><label for="eventQualified">Qualified</label><input id="eventQualified" type="number" min="0" value="0"></div><div><label for="eventContracts">Contracts</label><input id="eventContracts" type="number" min="0" value="0"></div></div>
+    <label for="eventResultNotes">Result notes</label><textarea id="eventResultNotes" placeholder="What worked, follow-up required, lessons learned…"></textarea>
+    <button class="btn primary" id="saveEvent" type="button">Save event</button><div class="status" id="saveStatus"></div>
+  </div>
+</div>
+<script type="module">
+import{db,auth,collection,doc,addDoc,updateDoc,onSnapshot,query,orderBy,serverTimestamp,onAuthStateChanged}from'./firebase-config.js';
+let events=[],currentId=null,unsub=null;const listView=document.getElementById('listView'),editView=document.getElementById('editView');
+const el=id=>document.getElementById(id);const esc=s=>{const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML};
+function parseDate(v){if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const[y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)}
+function eventState(e){const d=parseDate(e.date),today=new Date();today.setHours(0,0,0,0);if(!d)return'';if(d<today)return'Past';if(d.getTime()===today.getTime())return'Today';return'Upcoming'}
+function render(){if(!events.length){el('eventList').innerHTML='<div class="empty">No recruiting events yet.</div>';return;}const docs=[...events].sort((a,b)=>(a.date||'').localeCompare(b.date||''));el('eventList').innerHTML=docs.map(e=>{const results=Number(e.leads||0)+Number(e.appointments||0)+Number(e.qualified||0)+Number(e.contracts||0)>0;return`<div class="event-card" data-id="${esc(e.id)}"><div class="event-row"><div><div class="event-name">${esc(e.name||'Unnamed event')}</div><div class="event-meta">${esc(e.date||'No date')}${e.location?' · '+esc(e.location):''}</div></div><div class="event-type">${esc(eventState(e))} · ${esc(e.type||'Event')}</div></div>${results?`<div class="results"><span>${Number(e.leads||0)} leads</span><span>${Number(e.appointments||0)} appts</span><span>${Number(e.qualified||0)} qualified</span><span>${Number(e.contracts||0)} contracts</span></div>`:''}</div>`}).join('');document.querySelectorAll('.event-card').forEach(c=>c.addEventListener('click',()=>open(c.dataset.id)))}
+function open(id){currentId=id;const e=id?events.find(x=>x.id===id):{};['Name','Date','Location','Poc','Notes','ResultNotes'].forEach(k=>el('event'+k).value=e?.[k.charAt(0).toLowerCase()+k.slice(1)]||'');el('eventType').value=e?.type||'School Visit';['Leads','Appointments','Qualified','Contracts'].forEach(k=>el('event'+k).value=Number(e?.[k.toLowerCase()]||0));listView.classList.add('hidden');editView.classList.remove('hidden');el('saveStatus').textContent=''}
+function close(){currentId=null;editView.classList.add('hidden');listView.classList.remove('hidden')}
+el('addEvent').addEventListener('click',()=>open(null));el('backList').addEventListener('click',close);
+el('saveEvent').addEventListener('click',async()=>{const status=el('saveStatus'),payload={name:el('eventName').value.trim(),date:el('eventDate').value,type:el('eventType').value,location:el('eventLocation').value.trim(),poc:el('eventPoc').value.trim(),notes:el('eventNotes').value.trim(),leads:Math.max(0,Number(el('eventLeads').value)||0),appointments:Math.max(0,Number(el('eventAppointments').value)||0),qualified:Math.max(0,Number(el('eventQualified').value)||0),contracts:Math.max(0,Number(el('eventContracts').value)||0),resultNotes:el('eventResultNotes').value.trim(),updatedAt:serverTimestamp()};if(!payload.name||!payload.date){status.style.color='#E08B77';status.textContent='Event name and date are required.';return}try{if(currentId)await updateDoc(doc(db,'events',currentId),payload);else{payload.createdAt=serverTimestamp();const ref=await addDoc(collection(db,'events'),payload);currentId=ref.id}status.style.color='';status.textContent='Saved.';setTimeout(close,700)}catch(err){console.error(err);status.style.color='#E08B77';status.textContent='Save failed.'}});
+onAuthStateChanged(auth,user=>{if(!user){window.location.href='index.html';return}if(unsub)unsub();unsub=onSnapshot(query(collection(db,'events'),orderBy('date','asc')),snap=>{events=snap.docs.map(d=>({id:d.id,...d.data()}));render()},err=>{console.error(err);el('eventList').innerHTML='<div class="empty">Unable to load events.</div>'})});
+</script>
+</body>
+</html>
