@@ -77,6 +77,14 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
+  // The kiosk overrides the shared web fonts with local Pi system fonts. Once
+  // this worker controls the page, don't spend bandwidth/CPU on the unused
+  // Google Fonts stylesheet at all.
+  if (url.origin === 'https://fonts.googleapis.com') {
+    event.respondWith(Promise.resolve(new Response('', { status: 200, headers: { 'Content-Type': 'text/css; charset=utf-8' } })));
+    return;
+  }
+
   if (url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/10.12.2/')) {
     event.respondWith(cacheFirst(request));
     return;
