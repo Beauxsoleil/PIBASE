@@ -6,10 +6,9 @@ export function initKioskRuntime() {
 
   const state = {
     online: navigator.onLine,
-    applicants: 'loading',
+    applicants: Array.isArray(window.__PIBASE_APPLICANTS__) ? 'cache' : 'loading',
     calendar: 'loading',
     errors: 0,
-    startedAt: Date.now(),
     lastInteraction: Date.now(),
     recoveryPending: false
   };
@@ -52,6 +51,9 @@ export function initKioskRuntime() {
       boot.id = 'pibaseBoot';
       boot.innerHTML = `<div class="pibase-boot-card"><div class="pibase-boot-title">PIBASE Initializing</div><div class="pibase-boot-row"><span>Network</span><span class="pibase-boot-state" data-boot="network">Checking</span></div><div class="pibase-boot-row"><span>Applicants</span><span class="pibase-boot-state" data-boot="applicants">Loading</span></div><div class="pibase-boot-row"><span>Calendar</span><span class="pibase-boot-state" data-boot="calendar">Loading</span></div></div>`;
       document.body.appendChild(boot);
+      // A kiosk must always fail open. Even if one data source never answers,
+      // never leave a human trapped behind the initialization overlay.
+      setTimeout(() => dismissBoot(true), 5000);
     }
     if (!document.getElementById('pibaseStatusStrip')) {
       const status = document.createElement('div');
@@ -77,6 +79,16 @@ export function initKioskRuntime() {
     if (el) el.textContent = value;
   };
 
+  function dismissBoot(force = false) {
+    const boot = document.getElementById('pibaseBoot');
+    if (!boot || boot.classList.contains('done')) return;
+    const usableApplicants = state.applicants === 'ready' || state.applicants === 'cache';
+    const usableCalendar = state.calendar === 'ready' || !state.online;
+    if (!force && !(usableApplicants && usableCalendar)) return;
+    boot.classList.add('done');
+    setTimeout(() => boot.remove(), 220);
+  }
+
   function renderStatus() {
     const strip = document.getElementById('pibaseStatusStrip');
     const text = document.getElementById('pibaseStatusText');
@@ -90,36 +102,17 @@ export function initKioskRuntime() {
     setBoot('network', state.online ? 'Online' : 'Offline');
     setBoot('applicants', state.applicants === 'ready' ? 'Ready' : state.applicants === 'cache' ? 'Cached' : state.applicants === 'error' ? 'Retrying' : 'Loading');
     setBoot('calendar', state.calendar === 'ready' ? 'Ready' : state.calendar === 'error' ? 'Retrying' : 'Loading');
-    maybeDismissBoot();
+    dismissBoot(false);
   }
-
-  function maybeDismissBoot(force = false) {
-    const boot = document.getElementById('pibaseBoot');
-    if (!boot || boot.classList.contains('done')) return;
-    const usableApplicants = state.applicants === 'ready' || state.applicants === 'cache';
-    const usableCalendar = state.calendar === 'ready' || !state.online;
-    if (!force && !(usableApplicants && usableCalendar)) return;
-    boot.classList.add('done');
-    setTimeout(() => boot.remove(), 220);
-  }
-
-  setTimeout(() => maybeDismissBoot(true), 9000);
 
   function updateScreenIndicator() {
     const indicator = document.getElementById('pibaseScreenIndicator');
     if (!indicator) return;
     const detail = document.getElementById('detailView');
-    if (detail?.classList.contains('open')) {
-      indicator.textContent = 'Applicant Detail';
-      return;
-    }
+    if (detail?.classList.contains('open')) { indicator.textContent = 'Applicant Detail'; return; }
     const order = [
-      ['boardScreen', 'Applicant Board'],
-      ['todayScreen', 'Today'],
-      ['calendarScreen', 'Calendar'],
-      ['pipelineScreen', 'Pipeline / Mission'],
-      ['eventsScreen', 'Recruiting Events'],
-      ['territoryScreen', 'Territory Analytics']
+      ['boardScreen', 'Applicant Board'], ['todayScreen', 'Today'], ['calendarScreen', 'Calendar'],
+      ['pipelineScreen', 'Pipeline / Mission'], ['eventsScreen', 'Recruiting Events'], ['territoryScreen', 'Territory Analytics']
     ];
     const index = order.findIndex(([id]) => document.getElementById(id)?.classList.contains('active'));
     const resolved = index >= 0 ? index : 0;
@@ -134,36 +127,19 @@ export function initKioskRuntime() {
   const noteInteraction = () => { state.lastInteraction = Date.now(); };
   document.addEventListener('keydown', noteInteraction, { passive: true });
   document.addEventListener('pointerdown', noteInteraction, { passive: true });
-
   const idleFor = ms => Date.now() - state.lastInteraction >= ms;
   const safeReload = reason => {
     if (state.recoveryPending) return;
     state.recoveryPending = true;
-    const attempt = () => {
-      if (idleFor(60_000)) window.location.reload();
-      else setTimeout(attempt, 60_000);
-    };
+    const attempt = () => { if (idleFor(60_000)) window.location.reload(); else setTimeout(attempt, 60_000); };
     console.warn('PIBASE scheduled recovery reload:', reason);
     setTimeout(attempt, 15_000);
   };
 
-  window.addEventListener('online', () => {
-    const wasOffline = !state.online;
-    state.online = true;
-    renderStatus();
-    if (wasOffline) safeReload('connection restored');
-  });
-  window.addEventListener('offline', () => { state.online = false; renderStatus(); });
-
-  window.addEventListener('pibase:firebase-status', e => {
-    const value = e.detail?.state || 'ready';
-    state.applicants = value === 'cache' ? 'cache' : value === 'error' ? 'error' : 'ready';
-    renderStatus();
-  });
-  window.addEventListener('pibase:applicants-snapshot', () => {
-    if (state.applicants === 'loading') state.applicants = state.online ? 'ready' : 'cache';
-    renderStatus();
-  });
+  window.addEventListener('online', () => { const wasOffline = !state.online; state.online = true; renderStatus(); if (wasOffline) safeReload('connection restored'); });
+  window.addEventListener('offline', () => { state.online = false; renderStatus(); dismissBoot(true); });
+  window.addEventListener('pibase:firebase-status', e => { const value = e.detail?.state || 'ready'; state.applicants = value === 'cache' ? 'cache' : value === 'error' ? 'error' : 'ready'; renderStatus(); });
+  window.addEventListener('pibase:applicants-snapshot', () => { state.applicants = state.online ? 'ready' : 'cache'; renderStatus(); });
 
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (...args) => {
@@ -172,17 +148,10 @@ export function initKioskRuntime() {
     const isCalendar = /calendar\.ics(?:\?|$)/.test(url);
     try {
       const response = await nativeFetch(...args);
-      if (isCalendar) {
-        state.calendar = response.ok ? 'ready' : 'error';
-        renderStatus();
-      }
+      if (isCalendar) { state.calendar = response.ok ? 'ready' : 'error'; renderStatus(); }
       return response;
     } catch (error) {
-      if (isCalendar) {
-        state.calendar = 'error';
-        renderStatus();
-        retryCalendar();
-      }
+      if (isCalendar) { state.calendar = 'error'; renderStatus(); retryCalendar(); }
       throw error;
     }
   };
@@ -195,25 +164,13 @@ export function initKioskRuntime() {
       try {
         const res = await nativeFetch('./calendar.ics', { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        state.calendar = 'ready';
-        renderStatus();
-        safeReload('calendar recovered');
-      } catch (_) {
-        retryCalendar();
-      }
+        state.calendar = 'ready'; renderStatus(); safeReload('calendar recovered');
+      } catch (_) { retryCalendar(); }
     }, 15_000 * calendarRetries);
   }
 
-  window.addEventListener('error', () => {
-    state.errors++;
-    if (state.errors >= 3) safeReload('repeated script errors');
-  });
-  window.addEventListener('unhandledrejection', () => {
-    state.errors++;
-    if (state.errors >= 3) safeReload('repeated promise errors');
-  });
+  window.addEventListener('error', () => { state.errors++; if (state.errors >= 3) safeReload('repeated script errors'); });
+  window.addEventListener('unhandledrejection', () => { state.errors++; if (state.errors >= 3) safeReload('repeated promise errors'); });
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(error => console.warn('PIBASE offline cache unavailable', error));
-  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(error => console.warn('PIBASE offline cache unavailable', error));
 }
