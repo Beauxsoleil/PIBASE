@@ -68,9 +68,10 @@ export function onSnapshot(reference, ...args) {
   if (path === 'applicants' && callbackIndex >= 0 && typeof window !== 'undefined') {
     const original = args[callbackIndex];
     args[callbackIndex] = snapshot => {
+      const result = original(snapshot);
       window.__PIBASE_APPLICANTS_SNAPSHOT__ = snapshot;
       window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: snapshot }));
-      return original(snapshot);
+      return result;
     };
   }
 
