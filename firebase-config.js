@@ -74,3 +74,11 @@ export function needsReview(applicant) {
     (applicant.legalIssues && applicant.legalIssues.trim())
   );
 }
+
+// Add the Events entry point to the phone app and the fifth Events screen to
+// the kiosk without coupling those views into the shared data module itself.
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  import('./events-ui.js')
+    .then(({ initEventsUi }) => initEventsUi({ db, collection, onSnapshot, query, orderBy }))
+    .catch(error => console.warn('PIBASE events UI unavailable', error));
+}
