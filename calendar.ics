@@ -29,4 +29,10 @@ DTSTART;TZID=America/Boise:20260831T190600
 DTEND;TZID=America/Boise:20260831T193400
 SUMMARY:Back to School Night - Lunch Break / Resource Tables
 END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=America/Boise:20260911T130000
+DTEND;TZID=America/Boise:20260911T140000
+SUMMARY:Malaysia
+LOCATION:College of Southern Idaho\n999 Frontier Rd\nTwin Falls ID 83301\nUnited States
+END:VEVENT
 END:VCALENDAR
