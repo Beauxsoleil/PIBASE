@@ -31,6 +31,12 @@
   .sort-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
   .sort-row label { margin:0; white-space:nowrap; font-family:var(--font-mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; }
   .sort-row select { padding:8px 10px; font-size:.82rem; }
+  .mission-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin:0 0 14px; }
+  .mission-card .mission-title { font-family:var(--font-mono); color:var(--text-dim); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; margin-bottom:9px; }
+  .mission-card .field-row label { margin-top:0; }
+  .mission-save { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .mission-save .btn { padding:9px 14px; }
+  #missionStatus { font-size:.72rem; color:var(--teal); min-height:1em; }
   .list-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; }
   .list-card .row1 { display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .list-card .name { font-family:var(--font-display); font-size:1.05rem; }
@@ -70,6 +76,15 @@
 
 <div id="listScreen" class="wrap hidden">
   <header class="top"><h1>Applicants</h1><button id="signOutBtn">Sign out</button></header>
+  <div class="mission-card">
+    <div class="mission-title">Recruiting mission</div>
+    <div class="field-row">
+      <div><label for="missionFiscalYear">Fiscal year</label><input type="number" id="missionFiscalYear" min="2020" max="2100"></div>
+      <div><label for="missionTarget">Mission target</label><input type="number" id="missionTarget" min="0" step="1" placeholder="e.g. 18"></div>
+    </div>
+    <div class="helper">Used by the kiosk Pipeline / Mission screen. The enlisted count comes from current PIBASE records.</div>
+    <div class="mission-save"><button class="btn btn-secondary" id="saveMissionBtn" type="button">Save mission</button><div id="missionStatus"></div></div>
+  </div>
   <button class="add-btn" id="addBtn">+ New applicant</button>
   <div class="sort-row"><label for="sortMode">Sort</label><select id="sortMode"><option value="precedence">Precedence</option><option value="updated">Recently updated</option><option value="name">Name A–Z</option></select></div>
   <div id="listContainer"><div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div></div>
@@ -77,12 +92,10 @@
 
 <div id="detailScreen" class="wrap hidden">
   <button class="back-link" id="backBtn">‹ Back to list</button><div class="stage-rail" id="stageRail"></div>
-
   <div class="section-title">Identity</div>
   <label for="f_name">Name</label><input type="text" id="f_name">
   <div class="field-row"><div><label for="f_phone">Phone</label><input type="text" id="f_phone"></div><div><label for="f_email">Email</label><input type="text" id="f_email"></div></div>
-  <label for="f_generalArea">General area</label>
-  <select id="f_generalArea"><option value="">— Select area —</option><option value="Twin Falls">Twin Falls</option><option value="Burley">Burley</option><option value="Rupert">Rupert</option><option value="Filer">Filer</option><option value="Other">Other</option></select>
+  <label for="f_generalArea">General area</label><select id="f_generalArea"><option value="">— Select area —</option><option value="Twin Falls">Twin Falls</option><option value="Burley">Burley</option><option value="Rupert">Rupert</option><option value="Filer">Filer</option><option value="Other">Other</option></select>
 
   <div class="section-title">Recruiter precedence</div>
   <label for="f_precedence">Precedence</label><select id="f_precedence"><option value="normal">Normal</option><option value="medium">Medium</option><option value="high">High</option></select>
@@ -111,14 +124,19 @@
 </div>
 
 <script type="module">
-  import { db, auth, collection, doc, addDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, signInWithEmailAndPassword, onAuthStateChanged, signOut, STAGES, STAGE_SHORT, needsReview } from './firebase-config.js';
+  import { db, auth, collection, doc, addDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp, signInWithEmailAndPassword, onAuthStateChanged, signOut, STAGES, STAGE_SHORT, needsReview } from './firebase-config.js';
   const loginScreen=document.getElementById('loginScreen'),listScreen=document.getElementById('listScreen'),detailScreen=document.getElementById('detailScreen'),sortMode=document.getElementById('sortMode');
+  function currentFiscalYear(){const now=new Date();return now.getMonth()>=9?now.getFullYear()+1:now.getFullYear();}
   function showScreen(name){loginScreen.classList.toggle('hidden',name!=='login');listScreen.classList.toggle('hidden',name!=='list');detailScreen.classList.toggle('hidden',name!=='detail');}
   document.getElementById('loginBtn').addEventListener('click',async()=>{const email=document.getElementById('loginEmail').value.trim(),pass=document.getElementById('loginPass').value,errEl=document.getElementById('loginError');errEl.textContent='';try{await signInWithEmailAndPassword(auth,email,pass);}catch(e){errEl.textContent='Sign-in failed — check email and password.';}});
   document.getElementById('signOutBtn').addEventListener('click',()=>signOut(auth));
-  let applicants=[],unsubscribeApplicants=null;
-  onAuthStateChanged(auth,user=>{if(user){showScreen('list');subscribeApplicants();}else{showScreen('login');if(unsubscribeApplicants)unsubscribeApplicants();}});
+
+  let applicants=[],unsubscribeApplicants=null,unsubscribeMission=null;
+  onAuthStateChanged(auth,user=>{if(user){showScreen('list');subscribeApplicants();subscribeMission();}else{showScreen('login');if(unsubscribeApplicants)unsubscribeApplicants();if(unsubscribeMission)unsubscribeMission();}});
   function subscribeApplicants(){const q=query(collection(db,'applicants'),orderBy('updatedAt','desc'));unsubscribeApplicants=onSnapshot(q,snap=>{applicants=snap.docs.map(d=>({id:d.id,...d.data()}));renderList();});}
+  function subscribeMission(){if(unsubscribeMission)unsubscribeMission();unsubscribeMission=onSnapshot(doc(db,'settings','mission'),snap=>{const data=snap.exists()?snap.data():{};document.getElementById('missionFiscalYear').value=data.fiscalYear||currentFiscalYear();document.getElementById('missionTarget').value=Number.isFinite(Number(data.target))&&Number(data.target)>0?Number(data.target):'';},err=>{console.error('Mission settings read failed',err);document.getElementById('missionFiscalYear').value=currentFiscalYear();});}
+  document.getElementById('saveMissionBtn').addEventListener('click',async()=>{const status=document.getElementById('missionStatus'),fiscalYear=Math.max(2020,Math.min(2100,Number(document.getElementById('missionFiscalYear').value)||currentFiscalYear())),target=Math.max(0,Math.round(Number(document.getElementById('missionTarget').value)||0));status.textContent='';try{await setDoc(doc(db,'settings','mission'),{fiscalYear,target,updatedAt:serverTimestamp()},{merge:true});status.style.color='';status.textContent='Saved.';setTimeout(()=>status.textContent='',1800);}catch(e){console.error(e);status.style.color='#E08B77';status.textContent='Save failed.';}});
+
   function precedenceRank(v){return v==='high'?3:v==='medium'?2:1;}
   function timestampMillis(v){if(!v)return 0;if(typeof v.toMillis==='function')return v.toMillis();if(typeof v.seconds==='number')return v.seconds*1000;return 0;}
   function parseDateOnly(v){if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const [y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d);}
@@ -128,6 +146,7 @@
   function escapeHtml(str){const d=document.createElement('div');d.textContent=str==null?'':String(str);return d.innerHTML;}
   function renderList(){const container=document.getElementById('listContainer');if(!applicants.length){container.innerHTML='<div class="eyebrow" style="text-align:center;padding:30px 0;">No applicants yet</div>';return;}container.innerHTML=sortedApplicants().map(a=>{const precedence=a.precedence||'normal',label=precedence==='high'?'High':precedence==='medium'?'Medium':'Normal',next=nextActionLabel(a);return`<div class="list-card" data-id="${a.id}"><div class="row1"><div class="name">${escapeHtml(a.name||'Unnamed')}</div><div class="right-tags"><div class="precedence-tag ${precedence}">${label}</div><div class="stage-tag">${STAGE_SHORT[a.statusStage]||''}</div></div></div><div class="sub">${[a.generalArea||null,a.age?a.age+' yo':null,a.priorService].filter(Boolean).map(escapeHtml).join(' · ')}</div>${next?`<div class="next-action ${isActionOverdue(a)?'overdue':''}">${escapeHtml(next)}</div>`:''}</div>`;}).join('');container.querySelectorAll('.list-card').forEach(card=>card.addEventListener('click',()=>openDetail(card.dataset.id)));}
   sortMode.addEventListener('change',renderList);document.getElementById('addBtn').addEventListener('click',()=>openDetail(null));document.getElementById('backBtn').addEventListener('click',()=>{showScreen('list');currentId=null;});
+
   let currentId=null,currentStage=STAGES[0],currentNotes=[],unsubscribeNotes=null;
   function fieldEl(id){return document.getElementById('f_'+id);}
   function openDetail(id){currentId=id;const a=id?applicants.find(x=>x.id===id):{};currentStage=a?.statusStage||STAGES[0];['name','phone','email','generalArea','precedence','priorService','physicalHealth','legalIssues','educationLevel','maritalStatus','waiverType','waiverStatus','nextAction','nextActionDate'].forEach(k=>fieldEl(k).value=a?.[k]||(k==='precedence'?'normal':''));fieldEl('age').value=a?.age??'';fieldEl('dependents').value=a?.dependents??0;fieldEl('tattoos').value=a?.tattoosBrandsPiercings||'';renderStageRail();toggleWaiverFields();document.getElementById('newNoteText').value='';document.getElementById('saveStatus').textContent='';if(unsubscribeNotes)unsubscribeNotes();if(currentId){const nq=query(collection(db,'applicants',currentId,'notes'),orderBy('createdAt','desc'));unsubscribeNotes=onSnapshot(nq,snap=>{currentNotes=snap.docs.map(d=>({id:d.id,...d.data()}));renderNotes();});}else{currentNotes=[];renderNotes();}showScreen('detail');}
