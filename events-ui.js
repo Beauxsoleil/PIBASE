@@ -5,7 +5,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
   const isEdit = path.endsWith('/index.html') || path.endsWith('/') || path === '';
   const isKiosk = path.endsWith('/display.html');
   const currentFY = () => { const n = new Date(); return n.getMonth() >= 9 ? n.getFullYear() + 1 : n.getFullYear(); };
-  const docsFromSnapshot = snap => snap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
+  const docsFromSnapshot = value => Array.isArray(value) ? value : (value?.docs?.map(d => ({ id: d.id, ...d.data() })) || []);
   const missionFromDocs = docs => docs.find(a => Number(a.pibaseMissionTarget) > 0 || Number(a.pibaseMissionFiscalYear) > 0) || null;
 
   if (isEdit) {
@@ -27,7 +27,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       const status = document.getElementById('missionStatus');
       if (!fy || !target || !save || !status) return;
 
-      let applicantDocs = docsFromSnapshot(window.__PIBASE_APPLICANTS_SNAPSHOT__);
+      let applicantDocs = docsFromSnapshot(window.__PIBASE_APPLICANTS__);
       const applyMissionFields = () => {
         const source = missionFromDocs(applicantDocs);
         if (!source) return;
@@ -110,7 +110,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
     board.insertBefore(territoryScreen, detailView);
 
     let eventDocs = [];
-    let applicantDocs = docsFromSnapshot(window.__PIBASE_APPLICANTS_SNAPSHOT__);
+    let applicantDocs = docsFromSnapshot(window.__PIBASE_APPLICANTS__);
     let enhancementScreen = null;
     const AREAS = ['Twin Falls', 'Burley', 'Rupert', 'Filer', 'Other'];
     const GROUPS = ['Early', 'Processing', 'Q&E', 'Enlisted'];
@@ -204,12 +204,12 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       set('missionPace', target ? (remaining === 0 ? '0' : pace.toFixed(1)) : '—');
     }
 
-    function receiveApplicants(snapshot) {
-      applicantDocs = docsFromSnapshot(snapshot);
+    function receiveApplicants(value) {
+      applicantDocs = docsFromSnapshot(value);
       if (territoryScreen.classList.contains('active')) renderTerritory();
       requestAnimationFrame(applyMission);
     }
-    if (window.__PIBASE_APPLICANTS_SNAPSHOT__) receiveApplicants(window.__PIBASE_APPLICANTS_SNAPSHOT__);
+    if (window.__PIBASE_APPLICANTS__) receiveApplicants(window.__PIBASE_APPLICANTS__);
     window.addEventListener('pibase:applicants-snapshot', e => receiveApplicants(e.detail));
 
     onSnapshot(query(collection(db, 'events'), orderBy('date', 'asc')), snap => {
