@@ -1,0 +1,48 @@
+name: Sync iCloud Calendar
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-calendar.yml'
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-calendar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch published iCloud calendar
+        shell: bash
+        run: |
+          set -euo pipefail
+          CALENDAR_URL='https://p158-caldav.icloud.com/published/2/ODEzNzc2MzQ5ODEzNzc2M7dOWSENm8pADV3MQ_WsD963YRXzTCInAwMYiWPaL99qSEwKJrZPtb9TXTH_7CrrWf0IO-zFh1HNQP2FQ3pBbCQ'
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 2 \
+            -H 'User-Agent: PIBASE-Calendar-Sync/1.0' \
+            "$CALENDAR_URL" -o calendar.ics.tmp
+
+          grep -q 'BEGIN:VCALENDAR' calendar.ics.tmp
+          mv calendar.ics.tmp calendar.ics
+
+      - name: Publish updated calendar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- calendar.ics && git ls-files --error-unmatch calendar.ics >/dev/null 2>&1; then
+            echo 'Calendar is already current.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add calendar.ics
+          git commit -m 'Sync iCloud calendar'
+          git push
