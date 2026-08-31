@@ -84,7 +84,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
 
     const style = document.createElement('style');
     style.textContent = `
-      .events-layout,.territory-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(360px,.85fr);gap:18px;flex:1 1 auto;min-height:0;overflow:hidden}
+      .events-layout,.territory-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:18px;flex:1 1 auto;min-height:0;overflow:hidden}
       .events-panel,.territory-panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
       .events-head,.territory-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line);flex:0 0 auto}
       .events-title,.territory-title{font-family:var(--font-display);font-size:1.15rem;font-weight:600}.events-meta,.territory-meta{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em}
@@ -93,7 +93,8 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       .territory-list{display:flex;flex-direction:column;justify-content:space-between;gap:12px;flex:1 1 auto;min-height:0;padding-top:12px}.territory-row{display:grid;grid-template-columns:130px 46px minmax(0,1fr);gap:12px;align-items:center}.territory-name{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}.territory-count{font-family:var(--font-display);font-size:1.35rem;text-align:right}.territory-bar{height:10px;border:1px solid var(--line);background:var(--bg-raised);border-radius:999px;overflow:hidden}.territory-fill{height:100%;background:var(--brass)}
       .territory-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:14px 0 16px}.territory-stat{border-top:1px solid var(--line-bright);padding-top:10px}.territory-stat-value{font-family:var(--font-display);font-size:1.7rem}.territory-stat-label{font-family:var(--font-mono);font-size:.58rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em}
       .territory-matrix{display:grid;grid-template-columns:minmax(100px,1.25fr) repeat(4,minmax(54px,.7fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}.territory-cell{padding:8px 7px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:.6rem;color:var(--text-muted);text-align:center;white-space:nowrap}.territory-cell.label{text-align:left;color:var(--text)}.territory-cell.head{color:var(--text-dim);text-transform:uppercase;font-size:.54rem}.territory-note{font-family:var(--font-mono);font-size:.58rem;color:var(--text-dim);line-height:1.45;margin-top:12px}
-      @media(max-width:1000px){.events-layout,.territory-layout{grid-template-columns:1fr}}
+      @media(max-width:1100px){.events-layout,.territory-layout{grid-template-columns:minmax(0,1.15fr) minmax(285px,.85fr)!important;gap:12px!important}.events-panel,.territory-panel{padding:13px 14px!important}.territory-row{grid-template-columns:105px 36px minmax(0,1fr)!important;gap:8px!important}.territory-cell{padding:6px 4px!important;font-size:.54rem!important}}
+      @media(max-height:720px){.event-kiosk-row{padding:8px 0!important}.event-stats,.territory-stats{margin-top:8px!important;margin-bottom:8px!important;gap:8px!important}.territory-list{gap:7px!important;padding-top:7px!important}}
     `;
     document.head.appendChild(style);
 
@@ -112,6 +113,10 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
     let eventDocs = [];
     let applicantDocs = docsFromSnapshot(window.__PIBASE_APPLICANTS__);
     let enhancementScreen = null;
+    let eventRenderKey = '';
+    let territoryRenderKey = '';
+    let missionRenderKey = '';
+
     const AREAS = ['Twin Falls', 'Burley', 'Rupert', 'Filer', 'Other'];
     const GROUPS = ['Early', 'Processing', 'Q&E', 'Enlisted'];
     const esc = value => { const d = document.createElement('div'); d.textContent = value == null ? '' : String(value); return d.innerHTML; };
@@ -120,6 +125,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
     const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
     const areaOf = a => { const raw = (a.generalArea || a.area || a.location || '').trim(); return AREAS.includes(raw) ? raw : (raw ? 'Other' : 'Unassigned'); };
     const stageGroup = a => { const s = a.statusStage || ''; if (s === 'Enlisted') return 'Enlisted'; if (s === 'Q&E' || s === 'DEP') return 'Q&E'; if (s === 'Processing Authorized' || s === 'Processing Scheduled' || s === 'Waiver') return 'Processing'; return 'Early'; };
+    const setText = (id, value) => { const el = document.getElementById(id); if (el && el.textContent !== String(value)) el.textContent = value; };
 
     const eventRow = (e, results = false) => {
       const d = parseDate(e.date);
@@ -127,26 +133,35 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       return `<div class="event-kiosk-row"><div class="event-kiosk-top"><div class="event-kiosk-date">${esc(date)}</div><div><div class="event-kiosk-name">${esc(e.name || 'Unnamed event')}</div><div class="event-kiosk-sub">${[e.location, e.poc].filter(Boolean).map(esc).join(' · ')}</div></div><div class="event-kiosk-type">${esc(e.type || 'Event')}</div></div>${results ? `<div class="event-kiosk-results"><span>${num(e.leads)} leads</span><span>${num(e.appointments)} appts</span><span>${num(e.qualified)} qualified</span><span>${num(e.contracts)} contracts</span></div>` : ''}${results && e.resultNotes ? `<div class="event-note">${esc(e.resultNotes)}</div>` : ''}</div>`;
     };
 
-    function renderEvents() {
+    function renderEvents(force = false) {
+      const key = eventDocs.map(e => [e.id, e.date, e.name, e.location, e.poc, e.type, e.leads, e.appointments, e.qualified, e.contracts, e.resultNotes].join('|')).join('~');
+      if (!force && key === eventRenderKey) return;
+      eventRenderKey = key;
+
       const now = today();
       const upcoming = [];
       const past = [];
+      let leads = 0, appointments = 0, qualified = 0;
       for (const e of eventDocs) {
         const d = parseDate(e.date);
-        if (!d) continue;
-        (d >= now ? upcoming : past).push(e);
+        if (d) (d >= now ? upcoming : past).push(e);
+        leads += num(e.leads); appointments += num(e.appointments); qualified += num(e.qualified);
       }
       upcoming.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
       past.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      document.getElementById('eventsUpcomingCount').textContent = `${upcoming.length} upcoming`;
-      let leads = 0, appointments = 0, qualified = 0;
-      for (const e of eventDocs) { leads += num(e.leads); appointments += num(e.appointments); qualified += num(e.qualified); }
-      document.getElementById('eventTotalEvents').textContent = eventDocs.length;
-      document.getElementById('eventTotalLeads').textContent = leads;
-      document.getElementById('eventTotalAppointments').textContent = appointments;
-      document.getElementById('eventTotalQualified').textContent = qualified;
-      document.getElementById('eventsUpcoming').innerHTML = upcoming.length ? upcoming.slice(0, 6).map(e => eventRow(e)).join('') : '<div class="events-empty">No upcoming recruiting events entered in PIBASE.</div>';
-      document.getElementById('eventsRecent').innerHTML = past.length ? past.slice(0, 4).map(e => eventRow(e, true)).join('') : '<div class="events-empty">No completed event results yet.</div>';
+
+      setText('eventsUpcomingCount', `${upcoming.length} upcoming`);
+      setText('eventTotalEvents', eventDocs.length);
+      setText('eventTotalLeads', leads);
+      setText('eventTotalAppointments', appointments);
+      setText('eventTotalQualified', qualified);
+
+      const upcomingHtml = upcoming.length ? upcoming.slice(0, 6).map(e => eventRow(e)).join('') : '<div class="events-empty">No upcoming recruiting events entered in PIBASE.</div>';
+      const recentHtml = past.length ? past.slice(0, 4).map(e => eventRow(e, true)).join('') : '<div class="events-empty">No completed event results yet.</div>';
+      const up = document.getElementById('eventsUpcoming');
+      const recent = document.getElementById('eventsRecent');
+      if (up && up.innerHTML !== upcomingHtml) up.innerHTML = upcomingHtml;
+      if (recent && recent.innerHTML !== recentHtml) recent.innerHTML = recentHtml;
     }
 
     function aggregateApplicants() {
@@ -162,19 +177,29 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       return { areaCounts, matrix, active, enlisted };
     }
 
-    function renderTerritory() {
+    function renderTerritory(force = false) {
       const { areaCounts, matrix, active, enlisted } = aggregateApplicants();
+      const key = `${AREAS.map(a => areaCounts[a]).join(',')}|${areaCounts.Unassigned}|${active}|${enlisted}|${AREAS.flatMap(a => GROUPS.map(g => matrix[a][g])).join(',')}`;
+      if (!force && key === territoryRenderKey) return;
+      territoryRenderKey = key;
+
       const assigned = AREAS.reduce((sum, area) => sum + areaCounts[area], 0);
       const max = Math.max(1, ...AREAS.map(area => areaCounts[area]));
       let largest = '—', largestCount = 0;
       for (const area of AREAS) if (areaCounts[area] > largestCount) { largest = area; largestCount = areaCounts[area]; }
-      document.getElementById('territoryAssigned').textContent = `${assigned} assigned`;
-      document.getElementById('territoryUnassigned').textContent = areaCounts.Unassigned;
-      document.getElementById('territoryActive').textContent = active;
-      document.getElementById('territoryEnlisted').textContent = enlisted;
-      document.getElementById('territoryLargest').textContent = largest;
-      document.getElementById('territoryList').innerHTML = AREAS.map(area => `<div class="territory-row"><div class="territory-name">${esc(area)}</div><div class="territory-count">${areaCounts[area]}</div><div class="territory-bar"><div class="territory-fill" style="width:${areaCounts[area] / max * 100}%"></div></div></div>`).join('');
-      document.getElementById('territoryMatrix').innerHTML = `<div class="territory-cell head label">Area</div>${GROUPS.map(g => `<div class="territory-cell head">${esc(g)}</div>`).join('')}${AREAS.map(area => `<div class="territory-cell label">${esc(area)}</div>${GROUPS.map(g => `<div class="territory-cell">${matrix[area][g]}</div>`).join('')}`).join('')}`;
+
+      setText('territoryAssigned', `${assigned} assigned`);
+      setText('territoryUnassigned', areaCounts.Unassigned);
+      setText('territoryActive', active);
+      setText('territoryEnlisted', enlisted);
+      setText('territoryLargest', largest);
+
+      const listHtml = AREAS.map(area => `<div class="territory-row"><div class="territory-name">${esc(area)}</div><div class="territory-count">${areaCounts[area]}</div><div class="territory-bar"><div class="territory-fill" style="width:${areaCounts[area] / max * 100}%"></div></div></div>`).join('');
+      const matrixHtml = `<div class="territory-cell head label">Area</div>${GROUPS.map(g => `<div class="territory-cell head">${esc(g)}</div>`).join('')}${AREAS.map(area => `<div class="territory-cell label">${esc(area)}</div>${GROUPS.map(g => `<div class="territory-cell">${matrix[area][g]}</div>`).join('')}`).join('')}`;
+      const list = document.getElementById('territoryList');
+      const matrixEl = document.getElementById('territoryMatrix');
+      if (list && list.innerHTML !== listHtml) list.innerHTML = listHtml;
+      if (matrixEl && matrixEl.innerHTML !== matrixHtml) matrixEl.innerHTML = matrixHtml;
     }
 
     function monthsRemaining(fy) {
@@ -182,7 +207,7 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       return Math.max(1, (end - Date.now()) / (1000 * 60 * 60 * 24 * 30.4375));
     }
 
-    function applyMission() {
+    function applyMission(force = false) {
       const source = missionFromDocs(applicantDocs);
       if (!source || !pipelineScreen.classList.contains('active')) return;
       const fy = Number(source.pibaseMissionFiscalYear) || currentFY();
@@ -192,22 +217,26 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       const remaining = target ? Math.max(0, target - enlisted) : null;
       const percent = target ? Math.round(enlisted / target * 100) : null;
       const pace = target && remaining ? remaining / monthsRemaining(fy) : 0;
-      const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-      set('missionTitle', `FY${String(fy).slice(-2)} Recruiting Mission`);
+      const key = `${fy}|${target}|${enlisted}|${active}|${remaining}|${percent}|${pace.toFixed(2)}`;
+      if (!force && key === missionRenderKey) return;
+      missionRenderKey = key;
+
+      setText('missionTitle', `FY${String(fy).slice(-2)} Recruiting Mission`);
       const number = document.getElementById('missionNumber');
-      if (number) number.innerHTML = `${enlisted} <span>/ ${target || '—'}</span>`;
+      const numberHtml = `${enlisted} <span>/ ${target || '—'}</span>`;
+      if (number && number.innerHTML !== numberHtml) number.innerHTML = numberHtml;
       const progress = document.getElementById('missionProgress');
       if (progress) progress.style.width = `${target ? Math.min(100, enlisted / target * 100) : 0}%`;
-      set('missionRemaining', remaining === null ? '—' : remaining);
-      set('missionPercent', percent === null ? '—' : `${percent}%`);
-      set('missionActive', active);
-      set('missionPace', target ? (remaining === 0 ? '0' : pace.toFixed(1)) : '—');
+      setText('missionRemaining', remaining === null ? '—' : remaining);
+      setText('missionPercent', percent === null ? '—' : `${percent}%`);
+      setText('missionActive', active);
+      setText('missionPace', target ? (remaining === 0 ? '0' : pace.toFixed(1)) : '—');
     }
 
     function receiveApplicants(value) {
       applicantDocs = docsFromSnapshot(value);
       if (territoryScreen.classList.contains('active')) renderTerritory();
-      requestAnimationFrame(applyMission);
+      requestAnimationFrame(() => applyMission());
     }
     if (window.__PIBASE_APPLICANTS__) receiveApplicants(window.__PIBASE_APPLICANTS__);
     window.addEventListener('pibase:applicants-snapshot', e => receiveApplicants(e.detail));
@@ -221,20 +250,25 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       if (el) el.innerHTML = '<div class="events-empty">Unable to load recruiting events.</div>';
     });
 
+    const announceScreen = (id, title) => window.dispatchEvent(new CustomEvent('pibase:screen-change', { detail: { id, title } }));
+
     function showEnhancement(screen, title) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       screen.classList.add('active');
       screenTitle.textContent = title;
       enhancementScreen = screen;
-      if (screen === eventsScreen) renderEvents(); else renderTerritory();
+      if (screen === eventsScreen) renderEvents(true); else renderTerritory(true);
+      announceScreen(screen.id, title);
     }
+
     function showNative(screen, title) {
       eventsScreen.classList.remove('active');
       territoryScreen.classList.remove('active');
       screen.classList.add('active');
       screenTitle.textContent = title;
       enhancementScreen = null;
-      if (screen === pipelineScreen) requestAnimationFrame(applyMission);
+      if (screen === pipelineScreen) requestAnimationFrame(() => applyMission(true));
+      announceScreen(screen.id, title);
     }
 
     document.addEventListener('keydown', e => {
@@ -254,14 +288,15 @@ export function initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, 
       } else if (e.key === 'ArrowUp' && boardScreen.classList.contains('active')) {
         e.preventDefault(); e.stopPropagation(); showEnhancement(territoryScreen, 'Territory Analytics');
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        requestAnimationFrame(applyMission);
+        requestAnimationFrame(() => applyMission());
+        requestAnimationFrame(() => announceScreen(document.querySelector('.screen.active')?.id || '', screenTitle.textContent));
       }
     }, true);
 
     window.addEventListener('resize', () => {
       if (eventsScreen.classList.contains('active')) renderEvents();
       else if (territoryScreen.classList.contains('active')) renderTerritory();
-      else requestAnimationFrame(applyMission);
+      else requestAnimationFrame(() => applyMission());
     });
   };
 
