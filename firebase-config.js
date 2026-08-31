@@ -64,6 +64,21 @@ function referencePath(ref) {
   return '';
 }
 
+function isCollectionReference(ref, name) {
+  if (!ref) return false;
+  const candidates = [ref._query?.path, ref._key?.path, ref.path];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate?.segments) && candidate.segments.includes(name)) return true;
+    if (typeof candidate === 'string' && candidate.split('/').includes(name)) return true;
+    if (typeof candidate?.canonicalString === 'function') {
+      const canonical = candidate.canonicalString();
+      if (canonical === name || canonical.startsWith(`${name}/`) || canonical.includes(`/${name}`)) return true;
+    }
+  }
+  const fallback = referencePath(ref);
+  return fallback === name || fallback.startsWith(`${name}/`) || fallback.includes(`/${name}`) || fallback.includes(name);
+}
+
 function enhancementActive() {
   if (!isKiosk || typeof document === 'undefined') return false;
   return Boolean(
@@ -72,16 +87,15 @@ function enhancementActive() {
   );
 }
 
-// One applicant listener feeds every kiosk screen. When an enhancement screen
-// is active, the main Applicant Board render is briefly deferred so hidden
-// layout measurement never calculates pagination from a zero-width screen.
+// One applicant listener feeds every kiosk screen. Identify collection queries
+// structurally instead of depending on Firebase's private canonical query string.
 export function onSnapshot(reference, ...args) {
   const path = referencePath(reference);
 
-  if (isKiosk && path === 'settings/mission') return () => {};
+  if (isKiosk && (path === 'settings/mission' || isCollectionReference(reference, 'settings') && path.includes('mission'))) return () => {};
 
   const callbackIndex = args.findIndex(arg => typeof arg === 'function');
-  if (path === 'applicants' && callbackIndex >= 0 && typeof window !== 'undefined') {
+  if (isCollectionReference(reference, 'applicants') && callbackIndex >= 0 && typeof window !== 'undefined') {
     const original = args[callbackIndex];
     const errorIndex = args.findIndex((arg, index) => index > callbackIndex && typeof arg === 'function');
     const originalError = errorIndex >= 0 ? args[errorIndex] : null;
@@ -95,6 +109,7 @@ export function onSnapshot(reference, ...args) {
     args[callbackIndex] = snapshot => {
       const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       window.__PIBASE_APPLICANTS__ = plainDocs;
+      window.__PIBASE_APPLICANTS_READY__ = true;
       const source = snapshot.metadata?.fromCache ? 'cache' : 'server';
       window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: source === 'cache' ? 'cache' : 'ready', source } }));
       window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: plainDocs }));
@@ -108,6 +123,7 @@ export function onSnapshot(reference, ...args) {
 
     if (errorIndex >= 0) {
       args[errorIndex] = error => {
+        window.__PIBASE_APPLICANTS_ERROR__ = error?.code || 'unknown';
         window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: 'error', error: error?.code || 'unknown' } }));
         return originalError?.(error);
       };
