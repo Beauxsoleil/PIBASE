@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-kiosk-v1';
+const CACHE_NAME = 'pibase-kiosk-v2';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -34,7 +34,7 @@ self.addEventListener('activate', event => {
   })());
 });
 
-async function networkFirst(request, timeoutMs = 4500) {
+async function networkFirst(request, timeoutMs = 3500) {
   const cache = await caches.open(CACHE_NAME);
   let timeout;
   try {
@@ -77,12 +77,12 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // The kiosk overrides the shared web fonts with local Pi system fonts. Once
-  // this worker controls the page, don't spend bandwidth/CPU on the unused
-  // Google Fonts stylesheet at all.
-  if (url.origin === 'https://fonts.googleapis.com') {
-    event.respondWith(Promise.resolve(new Response('', { status: 200, headers: { 'Content-Type': 'text/css; charset=utf-8' } })));
-    return;
+  if (url.origin === 'https://www.googleapis.com' || url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com') {
+    // The Pi kiosk uses local system fonts; do not spend bandwidth on font CSS/files.
+    if (url.origin.includes('fonts.')) {
+      event.respondWith(new Response('', { status: 204 }));
+      return;
+    }
   }
 
   if (url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/10.12.2/')) {
@@ -92,12 +92,13 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate' || url.pathname.endsWith('/display.html') || url.pathname.endsWith('/calendar.ics')) {
+  const isKioskCode = /\/(?:display\.html|firebase-config\.js|events-ui\.js|kiosk-runtime\.js)$/.test(url.pathname);
+  if (request.mode === 'navigate' || isKioskCode || url.pathname.endsWith('/calendar.ics')) {
     event.respondWith(networkFirst(request));
     return;
   }
 
-  if (/\.(?:js|css|png|svg|ico)$/.test(url.pathname)) {
+  if (/\.(?:css|png|svg|ico)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
