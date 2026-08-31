@@ -383,10 +383,10 @@
     }
 
     const meta = [
-      applicant.age ? `${escapeHtml(String(applicant.age))} yo` : null,
+      applicant.age ? `${applicant.age} yo` : null,
       applicant.priorService || null,
       applicant.educationLevel || null
-    ].filter(Boolean).map(escapeHtml).join('  ·  ');
+    ].filter(Boolean).map(v => escapeHtml(String(v))).join('  ·  ');
 
     const note = applicant.latestNote
       ? `<div class="latest-note"><span class="note-label">Latest note</span>${escapeHtml(applicant.latestNote)}</div>`
@@ -534,6 +534,11 @@
   }
 
   function closeApplicant() {
+    const index = selectedIndex();
+    if (index >= 0 && pages.length) {
+      const pageSize = pages[0]?.length || 1;
+      currentPage = Math.min(Math.floor(index / pageSize), pages.length - 1);
+    }
     selectedApplicantId = null;
     detailView.classList.remove('open');
     detailView.innerHTML = '';
