@@ -54,8 +54,8 @@ function referencePath(ref) {
 }
 
 // Wrap Firestore snapshots so the kiosk has one applicant subscription that
-// other UI modules can reuse. This avoids duplicate websocket listeners and
-// duplicate applicant snapshots on the Raspberry Pi.
+// other UI modules can reuse. Only plain objects are retained outside the main
+// listener so Firestore QuerySnapshot internals can be garbage-collected.
 export function onSnapshot(reference, ...args) {
   const path = referencePath(reference);
 
@@ -69,8 +69,9 @@ export function onSnapshot(reference, ...args) {
     const original = args[callbackIndex];
     args[callbackIndex] = snapshot => {
       const result = original(snapshot);
-      window.__PIBASE_APPLICANTS_SNAPSHOT__ = snapshot;
-      window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: snapshot }));
+      const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      window.__PIBASE_APPLICANTS__ = plainDocs;
+      window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: plainDocs }));
       return result;
     };
   }
@@ -118,8 +119,31 @@ if (isKiosk && typeof document !== 'undefined') {
   document.documentElement.style.setProperty('--font-body', "Arial, 'Liberation Sans', sans-serif");
   document.documentElement.style.setProperty('--font-mono', "'DejaVu Sans Mono', 'Liberation Mono', monospace");
   const perfStyle = document.createElement('style');
-  perfStyle.textContent = '.card,.progress-fill{transition:none!important}.stage-rail .node-wrap.current .dot{box-shadow:none!important}';
+  perfStyle.textContent = `
+    .card,.progress-fill{transition:none!important}
+    .stage-rail .node-wrap.current .dot{box-shadow:none!important}
+    #pibaseKioskNav{position:fixed;right:14px;bottom:10px;z-index:40;display:flex;gap:7px;opacity:.72}
+    #pibaseKioskNav button{min-width:46px;height:36px;padding:0 10px;border:1px solid var(--line-bright);border-radius:5px;background:var(--bg-raised);color:var(--text-muted);font-family:var(--font-mono);font-size:.62rem;letter-spacing:.04em}
+    #pibaseKioskNav button:hover,#pibaseKioskNav button:focus-visible{opacity:1;border-color:var(--brass);color:var(--text)}
+  `;
   document.head.appendChild(perfStyle);
+
+  // Mouse/touch users get an obvious way to move between screens. These emit
+  // the same keys as the physical keyboard, keeping one navigation code path.
+  const installNav = () => {
+    if (document.getElementById('pibaseKioskNav')) return;
+    const nav = document.createElement('div');
+    nav.id = 'pibaseKioskNav';
+    nav.setAttribute('aria-label', 'Kiosk screen navigation');
+    nav.innerHTML = '<button type="button" data-kiosk-key="ArrowUp" aria-label="Previous screen">↑ Screen</button><button type="button" data-kiosk-key="ArrowDown" aria-label="Next screen">↓ Screen</button>';
+    nav.addEventListener('click', e => {
+      const key = e.target.closest('[data-kiosk-key]')?.dataset.kioskKey;
+      if (key) document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+    document.body.appendChild(nav);
+  };
+  if (document.body) installNav();
+  else document.addEventListener('DOMContentLoaded', installNav, { once: true });
 
   // Long-running Chromium sessions on a 1 GB Pi benefit from an occasional
   // clean reload. Only do it after an hour of uptime and five minutes idle so
