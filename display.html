@@ -435,6 +435,7 @@
 
   let allDocs = [];
   let pages = [];
+  let pageSize = 1;
   let currentPage = 0;
   let cycleTimer = null;
   let selectedApplicantId = null;
@@ -462,12 +463,13 @@
   function paginate({ preservePage = true } = {}) {
     if (allDocs.length === 0) {
       pages = [];
+      pageSize = 1;
       currentPage = 0;
       return;
     }
 
     const previousPage = currentPage;
-    const pageSize = measurePageSize();
+    pageSize = measurePageSize();
     pages = [];
     for (let i = 0; i < allDocs.length; i += pageSize) {
       pages.push(allDocs.slice(i, i + pageSize));
@@ -536,7 +538,6 @@
   function closeApplicant() {
     const index = selectedIndex();
     if (index >= 0 && pages.length) {
-      const pageSize = pages[0]?.length || 1;
       currentPage = Math.min(Math.floor(index / pageSize), pages.length - 1);
     }
     selectedApplicantId = null;
@@ -675,6 +676,7 @@
     if (snapshot.empty) {
       allDocs = [];
       pages = [];
+      pageSize = 1;
       currentPage = 0;
       if (cycleTimer) clearInterval(cycleTimer);
       cycleTimer = null;
