@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CALENDAR_URL='https://p158-caldav.icloud.com/published/2/ODEzNzc2MzQ5ODEzNzc2M7dOWSENm8pADV3MQ_WsD963YRXzTCInAwMYiWPaL99qSEwKJrZPtb9TXTH_7CrrWf0IO-zFh1HNQP2FQ3pBbCQ'
+          CALENDAR_URL='https://p158-caldav.icloud.com/published/2/ODEzNzc2MzQ5ODEzNzc2M7dOWSENm8pADV3MQ_WsD97VZU_mx5hSDTJPL30zScA4GxpHcCJSZl0Gm8-imByYxRhbMUdYxCAIhe_Sg3bJLz4'
           curl --fail --silent --show-error --location \
             --retry 3 --retry-delay 2 \
             -H 'User-Agent: PIBASE-Calendar-Sync/1.0' \
