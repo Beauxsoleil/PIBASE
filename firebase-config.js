@@ -87,6 +87,13 @@ function enhancementActive() {
   );
 }
 
+// Archived applicants remain in Firestore so their notes and history stay
+// attached to the original document. Every operational view treats them as
+// inactive, including legacy records that may only have an archive folder.
+export function isArchived(applicant) {
+  return applicant?.archived === true || Boolean(applicant?.archiveFolder);
+}
+
 // One applicant listener feeds every kiosk screen. Identify collection queries
 // structurally instead of depending on Firebase's private canonical query string.
 export function onSnapshot(reference, ...args) {
@@ -108,11 +115,12 @@ export function onSnapshot(reference, ...args) {
 
     args[callbackIndex] = snapshot => {
       const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      window.__PIBASE_APPLICANTS__ = plainDocs;
+      const activeDocs = plainDocs.filter(applicant => !isArchived(applicant));
+      window.__PIBASE_APPLICANTS__ = activeDocs;
       window.__PIBASE_APPLICANTS_READY__ = true;
       const source = snapshot.metadata?.fromCache ? 'cache' : 'server';
       window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: source === 'cache' ? 'cache' : 'ready', source } }));
-      window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: plainDocs }));
+      window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: activeDocs }));
 
       if (enhancementActive()) {
         pendingSnapshot = snapshot;
