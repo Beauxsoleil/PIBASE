@@ -104,6 +104,7 @@ public repo. Store it as a repository secret and the sync workflow will use it:
 1. GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**.
 2. Name it `ICAL_FEED_URL`, value = your published calendar URL
    (iCloud → Calendar → share a calendar → "Public Calendar" → copy link).
+   Paste the link as-is — both `https://…` and `webcal://…` forms work.
 3. The scheduled `Sync iCloud Calendar` workflow fails loudly with a reminder if
    the secret is missing.
 

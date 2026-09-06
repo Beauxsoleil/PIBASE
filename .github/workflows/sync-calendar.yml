@@ -34,6 +34,9 @@ jobs:
             echo "::error::Secrets and variables -> Actions)." >&2
             exit 1
           fi
+          # iCloud's share dialog may hand out a webcal:// link; curl needs
+          # https, so accept either form without making the user edit the URL.
+          ICAL_FEED_URL="${ICAL_FEED_URL/webcal:\/\//https:\/\/}"
           curl --fail --silent --show-error --location \
             --retry 3 --retry-delay 2 \
             -H 'User-Agent: PIBASE-Calendar-Sync/1.0' \
