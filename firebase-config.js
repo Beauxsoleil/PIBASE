@@ -18,6 +18,7 @@ import {
 import {
   getAuth,
   signInWithEmailAndPassword,
+  signInAnonymously,
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -46,37 +47,30 @@ export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-if (isKiosk) {
-  enableIndexedDbPersistence(db).catch(error => {
-    if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
-      console.warn('PIBASE Firestore offline persistence unavailable', error);
-    }
-  });
-  initKioskRuntime();
-}
-
-function referencePath(ref) {
-  if (!ref) return '';
-  if (typeof ref.path === 'string') return ref.path;
-  const path = ref._query?.path || ref._key?.path;
-  if (path && typeof path.canonicalString === 'function') return path.canonicalString();
-  if (Array.isArray(path?.segments)) return path.segments.join('/');
-  return '';
-}
-
-function isCollectionReference(ref, name) {
-  if (!ref) return false;
-  const candidates = [ref._query?.path, ref._key?.path, ref.path];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate?.segments) && candidate.segments.includes(name)) return true;
-    if (typeof candidate === 'string' && candidate.split('/').includes(name)) return true;
-    if (typeof candidate?.canonicalString === 'function') {
-      const canonical = candidate.canonicalString();
-      if (canonical === name || canonical.startsWith(`${name}/`) || canonical.includes(`/${name}`)) return true;
-    }
+// Offline persistence benefits both surfaces: the phone keeps field edits
+// usable without the MiFi puck, and the kiosk keeps serving cached applicants.
+enableIndexedDbPersistence(db).catch(error => {
+  if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
+    console.warn('PIBASE Firestore offline persistence unavailable', error);
   }
-  const fallback = referencePath(ref);
-  return fallback === name || fallback.startsWith(`${name}/`) || fallback.includes(`/${name}`) || fallback.includes(name);
+});
+
+// The TV reads Firestore without a recruiter login, so it signs in with an
+// anonymous credential: security rules then require request.auth != null
+// (protecting applicant PII from unauthenticated reads) instead of
+// `allow read: if true`. Requires the "Anonymous" provider in
+// Firebase console -> Authentication. authReady always resolves (the catch
+// swallows the failure) so kiosk code never hangs; a failed sign-in surfaces
+// as the usual Firestore permission-denied error on the display.
+export const authReady = isKiosk
+  ? signInAnonymously(auth).catch(error => {
+      console.error('PIBASE kiosk anonymous sign-in failed. Enable the Anonymous '
+        + 'sign-in provider, otherwise the kiosk cannot read applicants.', error);
+    })
+  : Promise.resolve();
+
+if (isKiosk) {
+  initKioskRuntime();
 }
 
 function enhancementActive() {
@@ -94,55 +88,63 @@ export function isArchived(applicant) {
   return applicant?.archived === true || Boolean(applicant?.archiveFolder);
 }
 
-// One applicant listener feeds every kiosk screen. Identify collection queries
-// structurally instead of depending on Firebase's private canonical query string.
-export function onSnapshot(reference, ...args) {
-  const path = referencePath(reference);
+// Canonical stage name: legacy records may carry "DEP" (Delayed Entry Program),
+// which every screen treats as "Q&E". Normalizing at the data boundary means
+// downstream code never has to special-case the alias.
+export function canonicalStage(stage) {
+  return stage === 'DEP' ? 'Q&E' : stage;
+}
 
-  if (isKiosk && (path === 'settings/mission' || isCollectionReference(reference, 'settings') && path.includes('mission'))) return () => {};
+// Plain snapshot passthrough for non-applicant queries (events, settings, ...).
+export const onSnapshot = firestoreOnSnapshot;
 
-  const callbackIndex = args.findIndex(arg => typeof arg === 'function');
-  if (isCollectionReference(reference, 'applicants') && callbackIndex >= 0 && typeof window !== 'undefined') {
-    const original = args[callbackIndex];
-    const errorIndex = args.findIndex((arg, index) => index > callbackIndex && typeof arg === 'function');
-    const originalError = errorIndex >= 0 ? args[errorIndex] : null;
-    let pendingSnapshot = null;
+// Kiosk applicant watcher. Callers opt in explicitly — no structural sniffing
+// of Firebase internals. Filters archived records, exposes active applicants to
+// the shared kiosk state (status strip + territory/events screens), and defers
+// delivery to the board while an enhancement screen is active so a stale
+// snapshot is not rendered over it.
+export function watchApplicants(queryRef, onNext, onError) {
+  let pendingSnapshot = null;
 
-    const deliverMain = snapshot => {
-      pendingSnapshot = null;
-      return original(snapshot);
-    };
+  const deliverMain = snapshot => {
+    pendingSnapshot = null;
+    return onNext(snapshot);
+  };
 
-    args[callbackIndex] = snapshot => {
-      const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      const activeDocs = plainDocs.filter(applicant => !isArchived(applicant));
-      window.__PIBASE_APPLICANTS__ = activeDocs;
-      window.__PIBASE_APPLICANTS_READY__ = true;
-      const source = snapshot.metadata?.fromCache ? 'cache' : 'server';
-      window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: source === 'cache' ? 'cache' : 'ready', source } }));
-      window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: activeDocs }));
+  const next = snapshot => {
+    const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const activeDocs = plainDocs
+      .filter(applicant => !isArchived(applicant))
+      .map(applicant => ({ ...applicant, statusStage: canonicalStage(applicant.statusStage) }));
+    window.__PIBASE_APPLICANTS__ = activeDocs;
+    window.__PIBASE_APPLICANTS_READY__ = true;
+    const source = snapshot.metadata?.fromCache ? 'cache' : 'server';
+    window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: source === 'cache' ? 'cache' : 'ready', source } }));
+    window.dispatchEvent(new CustomEvent('pibase:applicants-snapshot', { detail: activeDocs }));
 
-      if (enhancementActive()) {
-        pendingSnapshot = snapshot;
-        return;
-      }
-      return deliverMain(snapshot);
-    };
-
-    if (errorIndex >= 0) {
-      args[errorIndex] = error => {
-        window.__PIBASE_APPLICANTS_ERROR__ = error?.code || 'unknown';
-        window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: 'error', error: error?.code || 'unknown' } }));
-        return originalError?.(error);
-      };
+    if (enhancementActive()) {
+      pendingSnapshot = snapshot;
+      return;
     }
+    return deliverMain(snapshot);
+  };
 
-    window.addEventListener('pibase:screen-change', () => {
-      if (pendingSnapshot && !enhancementActive()) deliverMain(pendingSnapshot);
-    });
-  }
+  const error = err => {
+    window.__PIBASE_APPLICANTS_ERROR__ = err?.code || 'unknown';
+    window.dispatchEvent(new CustomEvent('pibase:firebase-status', { detail: { state: 'error', error: err?.code || 'unknown' } }));
+    return onError?.(err);
+  };
 
-  return firestoreOnSnapshot(reference, ...args);
+  const unsubscribe = firestoreOnSnapshot(queryRef, next, error);
+  const onScreenChange = () => {
+    if (pendingSnapshot && !enhancementActive()) deliverMain(pendingSnapshot);
+  };
+  window.addEventListener('pibase:screen-change', onScreenChange);
+
+  return () => {
+    window.removeEventListener('pibase:screen-change', onScreenChange);
+    unsubscribe();
+  };
 }
 
 export {
@@ -167,7 +169,6 @@ export const STAGE_SHORT = {
   "Processing Scheduled": "SCHED",
   "Waiver": "WAIVER",
   "Q&E": "Q&E",
-  "DEP": "Q&E",
   "Enlisted": "ENLISTED"
 };
 
@@ -221,8 +222,12 @@ if (isKiosk && typeof document !== 'undefined') {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const startEnhancements = () => initEventsUi({ db, collection, onSnapshot, query, orderBy });
   try {
-    initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, onSnapshot, query, orderBy });
+    // The kiosk's events/territory screens read Firestore, so wait for the
+    // anonymous credential before subscribing (avoid a permission-denied race).
+    if (isKiosk) authReady.then(startEnhancements);
+    else startEnhancements();
   } catch (error) {
     console.warn('PIBASE enhancement UI unavailable', error);
   }

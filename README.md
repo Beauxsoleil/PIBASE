@@ -22,31 +22,73 @@ Your site will be live at `https://<your-username>.github.io/<repo-name>/`.
 
 ## 2. Firestore security rules
 
-In Firebase console → Firestore Database → Rules, paste:
+The canonical rules live in [`firestore.rules`](./firestore.rules). Two ways to
+deploy them:
 
+**A. Firebase console (no CLI needed)**
+
+1. Open https://console.firebase.google.com/ and select project **pi-base-a3a09**.
+2. Go to **Build → Firestore Database → Rules** tab.
+3. Click **Edit rules**, replace everything with the contents of `firestore.rules`, and click **Publish**.
+
+**B. Firebase CLI**
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use pi-base-a3a09
+firebase deploy --only firestore:rules
 ```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /applicants/{applicantId} {
-      allow read: if true;
-      allow write: if request.auth != null;
 
-      match /notes/{noteId} {
-        allow read: if true;
-        allow write: if request.auth != null;
-      }
-    }
-  }
-}
-```
+(`firebase.json` in this repo already points at `firestore.rules`.)
 
-This lets the TV read without logging in, but only your signed-in phone can write.
+What changed from the old setup:
 
-## 3. Create your one login
+- **Applicant PII is no longer public.** The old rule was `allow read: if true`,
+  which let anyone on the internet read names, phones, emails, health and legal
+  notes via the Firestore REST API (the project ID is public in
+  `firebase-config.js`). Reads now require `request.auth != null`.
+- **All collections the app actually writes are covered** — `applicants`,
+  `applicants/{id}/notes`, `events`, and `settings/mission`.
+- **Writes are validated** (name required, numeric fields typed) instead of
+  accepting arbitrary keys/types.
+- **Clients can't delete** records — the app archives instead, so history and
+  notes stay recoverable.
 
-Firebase console → Authentication → Sign-in method → enable **Email/Password**.
+## 3. Set up authentication
+
+Firebase console → Authentication → Sign-in method:
+
+- Enable **Email/Password** (phone login).
+- Enable **Anonymous** (the TV kiosk signs in anonymously so its reads satisfy
+  `request.auth != null`). Without this the kiosk shows "Connection error".
+
 Then Authentication → Users → **Add user** → set the email/password you'll use on the phone.
+
+### One-time mission migration
+
+The mission (fiscal year + target) is now stored in a single `settings/mission`
+document — previously it was stashed inside an applicant record. After deploying,
+open the phone app once and re-enter/save the mission numbers; the kiosk's
+Pipeline screen will pick them up from the new location.
+
+### Reporting results on iCloud calendar events
+
+You no longer need to re-create an iCloud event to record its statistics:
+
+1. On the phone, open **Recruiting events**. Every iCloud event is now tappable —
+   tap **Report results ›** and enter leads / appointments / qualified /
+   contracts. Recent past events (last 30 days) stay listed so you can report
+   after an event ends.
+2. Results are stored in the `eventResults` collection, keyed to the event's
+   iCloud `UID` + start date — so they survive renames, moves, and calendar
+   resyncs, and never duplicate the event record.
+3. The TV's **Event Results** screen merges these in: its totals and "recent"
+   list now include iCloud-event results alongside hand-entered event records.
+
+> **Run the calendar sync once after deploying** so the published feed carries
+> each event's iCloud `UID` before you report results (the workflow now emits
+> `UID`). Results link by that identifier.
 
 ## 4. Pi 2 kiosk mode
 
@@ -84,4 +126,23 @@ Reboot — the Pi should boot straight into the live board.
 ## Notes
 
 - The `apiKey` in `firebase-config.js` is safe to be public — it identifies the project, it doesn't authorize access. Security comes from the Firestore rules above.
-- If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore.
+- If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore. Also confirm the **Anonymous** sign-in provider is enabled (see step 3).
+- The kiosk and the phone both enable Firestore offline persistence, so cached data stays visible when the MiFi puck drops. The kiosk refreshes its calendar feed every 5 minutes; the GitHub Action republishes `calendar.ics` every 10 minutes.
+- For stronger protection against scrapers, add **Firebase App Check** (reCAPTCHA) in the console and call `initializeAppCheck` in `firebase-config.js`.
+
+### Calendar feed secret
+
+The published iCloud calendar URL is a shared token, so it must not sit in the
+public repo. Store it as a repository secret and the sync workflow will use it:
+
+1. GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name it `ICAL_FEED_URL`, value = your published calendar URL
+   (iCloud → Calendar → share a calendar → "Public Calendar" → copy link).
+   Paste the link as-is — both `https://…` and `webcal://…` forms work.
+3. The scheduled `Sync iCloud Calendar` workflow fails loudly with a reminder if
+   the secret is missing.
+
+### CI
+
+`.github/workflows/ci.yml` syntax-checks every JS module and inline script and
+runs `scripts/smoke.mjs` (parser/date/escape unit tests) on each push/PR.

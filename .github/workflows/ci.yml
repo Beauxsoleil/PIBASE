@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax-check JS modules
+        run: |
+          for f in pibase-util.js firebase-config.js events-ui.js kiosk-runtime.js service-worker.js; do
+            tmp="$(mktemp --suffix=.mjs)"
+            cp "$f" "$tmp"
+            node --check "$tmp"
+            rm -f "$tmp"
+          done
+
+      - name: Syntax-check inline module scripts
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess, tempfile
+          from pathlib import Path
+          for name in ('index.html', 'display.html', 'events.html'):
+              html = Path(name).read_text(encoding='utf-8')
+              scripts = re.findall(r'<script type="module">(.*?)</script>', html, flags=re.S)
+              assert scripts, f'{name}: no inline module script found'
+              for body in scripts:
+                  with tempfile.NamedTemporaryFile('w', suffix='.mjs', delete=False, encoding='utf-8') as f:
+                      f.write(body); tmp = f.name
+                  subprocess.run(['node', '--check', tmp], check=True)
+                  os.unlink(tmp)
+          print('inline module scripts OK')
+          PY
+
+      - name: Smoke test shared helpers
+        run: node scripts/smoke.mjs

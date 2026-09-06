@@ -39,7 +39,8 @@ export function initKioskRuntime() {
     if (!document.getElementById('pibaseStatusStrip')) {
       const status = document.createElement('div');
       status.id = 'pibaseStatusStrip';
-      status.innerHTML = '<span class="dot"></span><span id="pibaseStatusText">Connecting</span>';
+      status.setAttribute('role', 'status');
+      status.innerHTML = '<span class="dot"></span><span id="pibaseStatusText" aria-live="polite">Connecting</span>';
       document.body.appendChild(status);
     }
     if (!document.getElementById('pibaseScreenIndicator')) {

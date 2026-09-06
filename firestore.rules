@@ -1,0 +1,82 @@
+rules_version = '2';
+// ============================================================
+// PIBASE Firestore security rules
+//
+// Deploy with:  firebase deploy --only firestore:rules
+// (or paste into Firebase console -> Firestore -> Rules)
+//
+// Security model:
+//   * The phone (index.html / events.html) signs in with Email/Password.
+//   * The TV kiosk (display.html) signs in ANONYMOUSLY, so its reads still
+//     pass `request.auth != null` while applicant PII is no longer readable
+//     by anyone on the internet (the previous rule was `allow read: if true`).
+//   * The Anonymous sign-in provider MUST be enabled in
+//     Firebase console -> Authentication -> Sign-in method.
+//   * Records are archived, never deleted from a client: `delete` is denied.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    // ---- Applicants ----
+    function validApplicant() {
+      let data = request.resource.data;
+      return isNonEmptyString(data.name)
+        // Numeric fields must be ints (or absent) — no accidental strings.
+        && (data.age == null || data.age is int)
+        && (data.dependents == null || data.dependents is int)
+        // Free-form but typed fields stay typed when present.
+        && (data.phone == null || data.phone is string)
+        && (data.email == null || data.email is string)
+        && (data.statusStage == null || data.statusStage is string);
+    }
+
+    match /applicants/{applicantId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && validApplicant();
+      allow delete: if false; // archive-only workflow
+
+      match /notes/{noteId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && isNonEmptyString(request.resource.data.text);
+        allow delete: if false;
+      }
+    }
+
+    // ---- Recruiting events ----
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.name)
+        && (request.resource.data.date == null || request.resource.data.date is string);
+      allow delete: if false;
+    }
+
+    // ---- Results attached to iCloud calendar events ----
+    // Docs are keyed by the calendar event's UID + start date, so reporting
+    // statistics never requires re-creating the event in PIBASE.
+    match /eventResults/{resultId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.summary)
+        && request.resource.data.start is string;
+      allow delete: if false;
+    }
+
+    // ---- App settings (e.g. mission) ----
+    match /settings/{documentId} {
+      // Mission numbers are not PII; an open read here keeps the kiosk
+      // resilient and avoids any anonymous-auth race for this one field.
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+  }
+}

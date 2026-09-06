@@ -20,23 +20,34 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install calendar parser
-        run: python3 -m pip install --disable-pip-version-check 'icalendar>=6,<7' 'recurring-ical-events>=3,<4'
+        run: python3 -m pip install --disable-pip-version-check 'icalendar==6.3.2' 'recurring-ical-events==3.8.2'
 
       - name: Fetch, expand, and slim published iCloud calendar
         shell: bash
+        env:
+          ICAL_FEED_URL: ${{ secrets.ICAL_FEED_URL }}
         run: |
           set -euo pipefail
-          CALENDAR_URL='https://p158-caldav.icloud.com/published/2/ODEzNzc2MzQ5ODEzNzc2M7dOWSENm8pADV3MQ_WsD97VZU_mx5hSDTJPL30zScA4GxpHcCJSZl0Gm8-imByYxRhbMUdYxCAIhe_Sg3bJLz4'
+          if [ -z "${ICAL_FEED_URL:-}" ]; then
+            echo "::error::The ICAL_FEED_URL secret is not set. Add your published" >&2
+            echo "::error::iCloud calendar URL as a repository secret (Settings ->" >&2
+            echo "::error::Secrets and variables -> Actions)." >&2
+            exit 1
+          fi
+          # iCloud's share dialog may hand out a webcal:// link; curl needs
+          # https, so accept either form without making the user edit the URL.
+          ICAL_FEED_URL="${ICAL_FEED_URL/webcal:\/\//https:\/\/}"
           curl --fail --silent --show-error --location \
             --retry 3 --retry-delay 2 \
             -H 'User-Agent: PIBASE-Calendar-Sync/1.0' \
-            "$CALENDAR_URL" -o calendar.full.ics
+            "$ICAL_FEED_URL" -o calendar.full.ics
 
           grep -q 'BEGIN:VCALENDAR' calendar.full.ics
 
           # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub's runner. The Pi
           # receives only flattened event instances and four display fields.
           python3 - <<'PY'
+          import hashlib
           from datetime import date, datetime, timedelta, timezone
           from pathlib import Path
           from zoneinfo import ZoneInfo
@@ -60,13 +71,16 @@ jobs:
                           .replace(',', '\\,')
                           .replace(';', '\\;'))
 
+          # Emit UTC ("...Z") so the kiosk renders correct wall-clock times
+          # regardless of the Pi's own timezone. Previously we emitted a naive
+          # TZID=America/Boise value, which the client parsed as *local* time
+          # and therefore got wrong on any non-Mountain device.
           def date_line(name, value):
               if isinstance(value, datetime):
                   if value.tzinfo is None:
-                      local = value
-                  else:
-                      local = value.astimezone(boise).replace(tzinfo=None)
-                  return f'{name};TZID=America/Boise:{local:%Y%m%dT%H%M%S}'
+                      value = value.replace(tzinfo=boise)
+                  utc = value.astimezone(timezone.utc)
+                  return f'{name}:{utc:%Y%m%dT%H%M%SZ}'
               if isinstance(value, date):
                   return f'{name};VALUE=DATE:{value:%Y%m%d}'
               return None
@@ -94,6 +108,14 @@ jobs:
 
               summary = clean_text(event.get('SUMMARY', 'Untitled event'))
               location = clean_text(event.get('LOCATION', ''))
+              # Preserve the iCloud UID so the phone can attach results to a
+              # calendar event without re-creating it. Recurring instances
+              # share a UID, so the client keys on UID + start date.
+              uid = str(event.get('UID') or '').strip().replace(':', '-').replace('\n', '').replace('\r', '')
+              if not uid:
+                  uid = 'pibase-' + hashlib.sha256(
+                      f'{summary}|{start}|{location}'.encode('utf-8')
+                  ).hexdigest()[:20]
               start_line = date_line('DTSTART', start)
               end_line = date_line('DTEND', end)
               if not start_line:
@@ -103,6 +125,7 @@ jobs:
               if end_line:
                   lines.append(end_line)
               lines.append(f'SUMMARY:{summary}')
+              lines.append(f'UID:{uid}')
               if location:
                   lines.append(f'LOCATION:{location}')
               lines.append('END:VEVENT')
