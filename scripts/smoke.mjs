@@ -56,6 +56,7 @@ const fixture = [
   'DTSTART:20260901T230000Z',
   'DTEND:20260902T020000Z',
   'SUMMARY:Ice Breaker / BBQ',
+  'UID:1A2B3C4D-1234-5678',
   'LOCATION:Hotel\\, Downtown',
   'END:VEVENT',
   'END:VCALENDAR'
@@ -64,7 +65,22 @@ const events = util.parseICS(fixture);
 assert.strictEqual(events.length, 1);
 assert.strictEqual(events[0].summary, 'Ice Breaker / BBQ');
 assert.strictEqual(events[0].location, 'Hotel, Downtown');
+assert.strictEqual(events[0].uid, '1A2B3C4D-1234-5678');
 assert.strictEqual(events[0].start.toISOString(), '2026-09-01T23:00:00.000Z');
+
+// calendarEventKey — UID-based, stable, Firestore-safe doc id
+const key = util.calendarEventKey(events[0]);
+assert.ok(key.startsWith('1A2B3C4D-1234-5678'), `key should use UID, got ${key}`);
+assert.ok(key.endsWith('20260901'), `key should embed the start date, got ${key}`);
+assert.ok(!key.includes('/'), 'key must not contain "/"');
+assert.ok(key.length > 0 && key.length <= 480, 'key length sane');
+// no UID -> falls back to summary/location, still non-empty and safe
+const noUid = util.calendarEventKey({ summary: 'Career Fair', location: 'Gym', start: events[0].start });
+assert.ok(noUid.length > 0 && !noUid.includes('/'));
+
+// toDateInput
+assert.strictEqual(util.toDateInput(new Date(2026, 8, 5)), '2026-09-05');
+assert.strictEqual(util.toDateInput('invalid'), '');
 
 // Integration: the committed calendar parses to valid events.
 const ics = await readFile(join(root, 'calendar.ics'), 'utf8');

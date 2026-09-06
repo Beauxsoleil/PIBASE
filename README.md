@@ -56,6 +56,24 @@ document — previously it was stashed inside an applicant record. After deployi
 open the phone app once and re-enter/save the mission numbers; the kiosk's
 Pipeline screen will pick them up from the new location.
 
+### Reporting results on iCloud calendar events
+
+You no longer need to re-create an iCloud event to record its statistics:
+
+1. On the phone, open **Recruiting events**. Every iCloud event is now tappable —
+   tap **Report results ›** and enter leads / appointments / qualified /
+   contracts. Recent past events (last 30 days) stay listed so you can report
+   after an event ends.
+2. Results are stored in the `eventResults` collection, keyed to the event's
+   iCloud `UID` + start date — so they survive renames, moves, and calendar
+   resyncs, and never duplicate the event record.
+3. The TV's **Event Results** screen merges these in: its totals and "recent"
+   list now include iCloud-event results alongside hand-entered event records.
+
+> **Run the calendar sync once after deploying** so the published feed carries
+> each event's iCloud `UID` before you report results (the workflow now emits
+> `UID`). Results link by that identifier.
+
 ## 4. Pi 2 kiosk mode
 
 On the Pi, install a lightweight browser (Chromium) and autostart it in kiosk mode pointed at the display URL.

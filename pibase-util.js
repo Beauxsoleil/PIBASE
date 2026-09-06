@@ -29,6 +29,28 @@ export function parseDateOnly(v) {
   return new Date(y, m - 1, d);
 }
 
+// Date -> local "YYYY-MM-DD" string for <input type="date"> values.
+export function toDateInput(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Stable Firestore doc id for a parsed iCloud calendar event. UID (when the
+// feed provides one) survives renames/moves; otherwise we fall back to the
+// event identity. Start date is appended so recurring-series instances stay
+// distinct.
+export function calendarEventKey(event) {
+  const start = event.start ? toDateInput(event.start).replace(/-/g, '') : 'nodate';
+  const idPart = (event.uid || '').trim() || `${event.summary || 'event'}|${event.location || ''}`;
+  const raw = `${idPart}|${start}`;
+  const safe = raw.replace(/[^a-zA-Z0-9._@+-]/g, '_');
+  return safe.slice(0, 480);
+}
+
 export function startOfDay(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -102,6 +124,7 @@ export function parseICS(text) {
       return {
         summary: unescapeICS(get('SUMMARY')) || 'Untitled event',
         location: unescapeICS(get('LOCATION')),
+        uid: (get('UID') || '').trim(),
         start: parseICSDate(get('DTSTART')),
         end: parseICSDate(get('DTEND'))
       };

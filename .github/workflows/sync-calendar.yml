@@ -47,6 +47,7 @@ jobs:
           # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub's runner. The Pi
           # receives only flattened event instances and four display fields.
           python3 - <<'PY'
+          import hashlib
           from datetime import date, datetime, timedelta, timezone
           from pathlib import Path
           from zoneinfo import ZoneInfo
@@ -107,6 +108,14 @@ jobs:
 
               summary = clean_text(event.get('SUMMARY', 'Untitled event'))
               location = clean_text(event.get('LOCATION', ''))
+              # Preserve the iCloud UID so the phone can attach results to a
+              # calendar event without re-creating it. Recurring instances
+              # share a UID, so the client keys on UID + start date.
+              uid = str(event.get('UID') or '').strip().replace(':', '-').replace('\n', '').replace('\r', '')
+              if not uid:
+                  uid = 'pibase-' + hashlib.sha256(
+                      f'{summary}|{start}|{location}'.encode('utf-8')
+                  ).hexdigest()[:20]
               start_line = date_line('DTSTART', start)
               end_line = date_line('DTEND', end)
               if not start_line:
@@ -116,6 +125,7 @@ jobs:
               if end_line:
                   lines.append(end_line)
               lines.append(f'SUMMARY:{summary}')
+              lines.append(f'UID:{uid}')
               if location:
                   lines.append(f'LOCATION:{location}')
               lines.append('END:VEVENT')

@@ -59,6 +59,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- Results attached to iCloud calendar events ----
+    // Docs are keyed by the calendar event's UID + start date, so reporting
+    // statistics never requires re-creating the event in PIBASE.
+    match /eventResults/{resultId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.summary)
+        && request.resource.data.start is string;
+      allow delete: if false;
+    }
+
     // ---- App settings (e.g. mission) ----
     match /settings/{documentId} {
       // Mission numbers are not PII; an open read here keeps the kiosk
