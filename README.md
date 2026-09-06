@@ -95,3 +95,19 @@ Reboot — the Pi should boot straight into the live board.
 - If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore. Also confirm the **Anonymous** sign-in provider is enabled (see step 3).
 - The kiosk and the phone both enable Firestore offline persistence, so cached data stays visible when the MiFi puck drops. The kiosk refreshes its calendar feed every 5 minutes; the GitHub Action republishes `calendar.ics` every 10 minutes.
 - For stronger protection against scrapers, add **Firebase App Check** (reCAPTCHA) in the console and call `initializeAppCheck` in `firebase-config.js`.
+
+### Calendar feed secret
+
+The published iCloud calendar URL is a shared token, so it must not sit in the
+public repo. Store it as a repository secret and the sync workflow will use it:
+
+1. GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name it `ICAL_FEED_URL`, value = your published calendar URL
+   (iCloud → Calendar → share a calendar → "Public Calendar" → copy link).
+3. The scheduled `Sync iCloud Calendar` workflow fails loudly with a reminder if
+   the secret is missing.
+
+### CI
+
+`.github/workflows/ci.yml` syntax-checks every JS module and inline script and
+runs `scripts/smoke.mjs` (parser/date/escape unit tests) on each push/PR.

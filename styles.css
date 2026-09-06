@@ -14,7 +14,7 @@
 
   --text: #E9E6DC;
   --text-muted: #8FA096;
-  --text-dim: #5C6B61;
+  --text-dim: #76827A; /* ≥4.5:1 on --bg for small text (was #5C6B61 ≈3.4:1) */
 
   --brass: #C6A15B;
   --brass-dim: #8A7040;

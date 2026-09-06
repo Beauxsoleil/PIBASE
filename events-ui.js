@@ -43,7 +43,7 @@ export function initEventsUi({ db, collection, onSnapshot, query, orderBy }) {
     const AREAS=['Twin Falls','Burley','Rupert','Filer','Other'],GROUPS=['Early','Processing','Q&E','Enlisted'];
     const esc=v=>{const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML},num=v=>Math.max(0,Number(v)||0),parseDate=v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const[y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)},today=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
     const areaOf=a=>{const raw=(a.generalArea||a.area||a.location||'').trim();return AREAS.includes(raw)?raw:(raw?'Other':'Unassigned')};
-    const groupOf=a=>{const s=a.statusStage||'';if(s==='Enlisted')return'Enlisted';if(s==='Q&E'||s==='DEP')return'Q&E';if(s==='Processing Authorized'||s==='Processing Scheduled'||s==='Waiver')return'Processing';return'Early'};
+    const groupOf=a=>{const s=a.statusStage||'';if(s==='Enlisted')return'Enlisted';if(s==='Q&E')return'Q&E';if(s==='Processing Authorized'||s==='Processing Scheduled'||s==='Waiver')return'Processing';return'Early'};
     const setText=(id,v)=>{const el=document.getElementById(id);if(el&&el.textContent!==String(v))el.textContent=v};
     const announce=(id,name)=>window.dispatchEvent(new CustomEvent('pibase:screen-change',{detail:{id,title:name}}));
 
