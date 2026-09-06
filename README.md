@@ -22,31 +22,39 @@ Your site will be live at `https://<your-username>.github.io/<repo-name>/`.
 
 ## 2. Firestore security rules
 
-In Firebase console → Firestore Database → Rules, paste:
+The canonical rules live in [`firestore.rules`](./firestore.rules) — deploy them with the
+Firebase CLI (`firebase deploy --only firestore:rules`) or paste them into
+Firebase console → Firestore Database → Rules.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /applicants/{applicantId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+What changed from the old setup:
 
-      match /notes/{noteId} {
-        allow read: if true;
-        allow write: if request.auth != null;
-      }
-    }
-  }
-}
-```
+- **Applicant PII is no longer public.** The old rule was `allow read: if true`,
+  which let anyone on the internet read names, phones, emails, health and legal
+  notes via the Firestore REST API (the project ID is public in
+  `firebase-config.js`). Reads now require `request.auth != null`.
+- **All collections the app actually writes are covered** — `applicants`,
+  `applicants/{id}/notes`, `events`, and `settings/mission`.
+- **Writes are validated** (name required, numeric fields typed) instead of
+  accepting arbitrary keys/types.
+- **Clients can't delete** records — the app archives instead, so history and
+  notes stay recoverable.
 
-This lets the TV read without logging in, but only your signed-in phone can write.
+## 3. Set up authentication
 
-## 3. Create your one login
+Firebase console → Authentication → Sign-in method:
 
-Firebase console → Authentication → Sign-in method → enable **Email/Password**.
+- Enable **Email/Password** (phone login).
+- Enable **Anonymous** (the TV kiosk signs in anonymously so its reads satisfy
+  `request.auth != null`). Without this the kiosk shows "Connection error".
+
 Then Authentication → Users → **Add user** → set the email/password you'll use on the phone.
+
+### One-time mission migration
+
+The mission (fiscal year + target) is now stored in a single `settings/mission`
+document — previously it was stashed inside an applicant record. After deploying,
+open the phone app once and re-enter/save the mission numbers; the kiosk's
+Pipeline screen will pick them up from the new location.
 
 ## 4. Pi 2 kiosk mode
 
@@ -84,4 +92,6 @@ Reboot — the Pi should boot straight into the live board.
 ## Notes
 
 - The `apiKey` in `firebase-config.js` is safe to be public — it identifies the project, it doesn't authorize access. Security comes from the Firestore rules above.
-- If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore.
+- If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore. Also confirm the **Anonymous** sign-in provider is enabled (see step 3).
+- The kiosk and the phone both enable Firestore offline persistence, so cached data stays visible when the MiFi puck drops. The kiosk refreshes its calendar feed every 5 minutes; the GitHub Action republishes `calendar.ics` every 10 minutes.
+- For stronger protection against scrapers, add **Firebase App Check** (reCAPTCHA) in the console and call `initializeAppCheck` in `firebase-config.js`.

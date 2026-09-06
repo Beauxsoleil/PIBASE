@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install calendar parser
-        run: python3 -m pip install --disable-pip-version-check 'icalendar>=6,<7' 'recurring-ical-events>=3,<4'
+        run: python3 -m pip install --disable-pip-version-check 'icalendar==6.3.2' 'recurring-ical-events==3.8.2'
 
       - name: Fetch, expand, and slim published iCloud calendar
         shell: bash
@@ -60,13 +60,16 @@ jobs:
                           .replace(',', '\\,')
                           .replace(';', '\\;'))
 
+          # Emit UTC ("...Z") so the kiosk renders correct wall-clock times
+          # regardless of the Pi's own timezone. Previously we emitted a naive
+          # TZID=America/Boise value, which the client parsed as *local* time
+          # and therefore got wrong on any non-Mountain device.
           def date_line(name, value):
               if isinstance(value, datetime):
                   if value.tzinfo is None:
-                      local = value
-                  else:
-                      local = value.astimezone(boise).replace(tzinfo=None)
-                  return f'{name};TZID=America/Boise:{local:%Y%m%dT%H%M%S}'
+                      value = value.replace(tzinfo=boise)
+                  utc = value.astimezone(timezone.utc)
+                  return f'{name}:{utc:%Y%m%dT%H%M%SZ}'
               if isinstance(value, date):
                   return f'{name};VALUE=DATE:{value:%Y%m%d}'
               return None

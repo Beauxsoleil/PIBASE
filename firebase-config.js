@@ -18,6 +18,7 @@ import {
 import {
   getAuth,
   signInWithEmailAndPassword,
+  signInAnonymously,
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -46,12 +47,29 @@ export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
+// Offline persistence benefits both surfaces: the phone keeps field edits
+// usable without the MiFi puck, and the kiosk keeps serving cached applicants.
+enableIndexedDbPersistence(db).catch(error => {
+  if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
+    console.warn('PIBASE Firestore offline persistence unavailable', error);
+  }
+});
+
+// The TV reads Firestore without a recruiter login, so it signs in with an
+// anonymous credential: security rules then require request.auth != null
+// (protecting applicant PII from unauthenticated reads) instead of
+// `allow read: if true`. Requires the "Anonymous" provider in
+// Firebase console -> Authentication. authReady always resolves (the catch
+// swallows the failure) so kiosk code never hangs; a failed sign-in surfaces
+// as the usual Firestore permission-denied error on the display.
+export const authReady = isKiosk
+  ? signInAnonymously(auth).catch(error => {
+      console.error('PIBASE kiosk anonymous sign-in failed. Enable the Anonymous '
+        + 'sign-in provider, otherwise the kiosk cannot read applicants.', error);
+    })
+  : Promise.resolve();
+
 if (isKiosk) {
-  enableIndexedDbPersistence(db).catch(error => {
-    if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
-      console.warn('PIBASE Firestore offline persistence unavailable', error);
-    }
-  });
   initKioskRuntime();
 }
 
@@ -97,10 +115,6 @@ export function isArchived(applicant) {
 // One applicant listener feeds every kiosk screen. Identify collection queries
 // structurally instead of depending on Firebase's private canonical query string.
 export function onSnapshot(reference, ...args) {
-  const path = referencePath(reference);
-
-  if (isKiosk && (path === 'settings/mission' || isCollectionReference(reference, 'settings') && path.includes('mission'))) return () => {};
-
   const callbackIndex = args.findIndex(arg => typeof arg === 'function');
   if (isCollectionReference(reference, 'applicants') && callbackIndex >= 0 && typeof window !== 'undefined') {
     const original = args[callbackIndex];
@@ -221,8 +235,12 @@ if (isKiosk && typeof document !== 'undefined') {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const startEnhancements = () => initEventsUi({ db, collection, onSnapshot, query, orderBy });
   try {
-    initEventsUi({ db, collection, doc, updateDoc, serverTimestamp, onSnapshot, query, orderBy });
+    // The kiosk's events/territory screens read Firestore, so wait for the
+    // anonymous credential before subscribing (avoid a permission-denied race).
+    if (isKiosk) authReady.then(startEnhancements);
+    else startEnhancements();
   } catch (error) {
     console.warn('PIBASE enhancement UI unavailable', error);
   }

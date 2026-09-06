@@ -36,18 +36,15 @@
 </div>
 <script type="module">
 import{db,auth,collection,doc,addDoc,updateDoc,onSnapshot,query,orderBy,serverTimestamp,onAuthStateChanged}from'./firebase-config.js';
+import{escapeHtml,parseDateOnly,parseICS}from'./pibase-util.js';
 let events=[],calendarEvents=[],eventsStatus='loading',calendarStatus='loading',currentId=null,unsub=null;const listView=document.getElementById('listView'),editView=document.getElementById('editView');
-const el=id=>document.getElementById(id);const esc=s=>{const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML};
-function parseDate(v){if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const[y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)}
+const el=id=>document.getElementById(id);const esc=escapeHtml;const parseDate=parseDateOnly;
 function eventState(e){const d=parseDate(e.date),today=new Date();today.setHours(0,0,0,0);if(!d)return'';if(d<today)return'Past';if(d.getTime()===today.getTime())return'Today';return'Upcoming'}
 
-function unfoldICS(text){return text.replace(/\r\n[ \t]/g,'').replace(/\n[ \t]/g,'')}
-function unescapeICS(value){return(value||'').replace(/\\n/gi,' · ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\')}
-function parseICSDate(value){if(!value)return null;const v=value.trim();if(/^\d{8}$/.test(v))return new Date(Number(v.slice(0,4)),Number(v.slice(4,6))-1,Number(v.slice(6,8)));const m=v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/);if(!m)return null;const[,y,mo,d,h,mi,s='00',z]=m;return z?new Date(Date.UTC(+y,+mo-1,+d,+h,+mi,+s)):new Date(+y,+mo-1,+d,+h,+mi,+s)}
-function parseICS(text){const clean=unfoldICS(text),blocks=clean.split('BEGIN:VEVENT').slice(1).map(x=>x.split('END:VEVENT')[0]);return blocks.map((block,index)=>{const lines=block.split(/\r?\n/),get=name=>{const line=lines.find(l=>l.startsWith(name+':')||l.startsWith(name+';'));return line?line.slice(line.indexOf(':')+1):''};return{id:`icloud-${index}`,name:unescapeICS(get('SUMMARY'))||'Untitled event',location:unescapeICS(get('LOCATION')),start:parseICSDate(get('DTSTART')),end:parseICSDate(get('DTEND'))}}).filter(e=>e.start)}
+
 function calendarState(start){const day=new Date(start);day.setHours(0,0,0,0);const today=new Date();today.setHours(0,0,0,0);if(day<today)return'Past';if(day.getTime()===today.getTime())return'Today';return'Upcoming'}
 function calendarMeta(e){const allDay=e.start.getHours()===0&&e.start.getMinutes()===0&&(!e.end||e.end-e.start>=86400000),date=e.start.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),time=allDay?'All day':e.start.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});return`${date} · ${time}${e.location?' · '+e.location:''}`}
-function calendarCard(e){return`<div class="event-card synced"><div class="event-row"><div><div class="event-name">${esc(e.name)}</div><div class="event-meta">${esc(calendarMeta(e))}</div></div><div class="event-type">${esc(calendarState(e.start))}<br>iCloud</div></div></div>`}
+function calendarCard(e){return`<div class="event-card synced"><div class="event-row"><div><div class="event-name">${esc(e.summary)}</div><div class="event-meta">${esc(calendarMeta(e))}</div></div><div class="event-type">${esc(calendarState(e.start))}<br>iCloud</div></div></div>`}
 function recruitingCard(e){const results=Number(e.leads||0)+Number(e.appointments||0)+Number(e.qualified||0)+Number(e.contracts||0)>0;return`<div class="event-card" data-id="${esc(e.id)}"><div class="event-row"><div><div class="event-name">${esc(e.name||'Unnamed event')}</div><div class="event-meta">${esc(e.date||'No date')}${e.location?' · '+esc(e.location):''}</div></div><div class="event-type">${esc(eventState(e))} · ${esc(e.type||'Event')}</div></div>${results?`<div class="results"><span>${Number(e.leads||0)} leads</span><span>${Number(e.appointments||0)} appts</span><span>${Number(e.qualified||0)} qualified</span><span>${Number(e.contracts||0)} contracts</span></div>`:''}</div>`}
 function render(){
   const today=new Date();today.setHours(0,0,0,0);

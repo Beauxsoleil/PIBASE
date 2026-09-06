@@ -1,10 +1,11 @@
-const CACHE_NAME = 'pibase-kiosk-v2';
+const CACHE_NAME = 'pibase-kiosk-v3';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
   'display.html',
   'styles.css',
   'firebase-config.js',
+  'pibase-util.js',
   'events-ui.js',
   'kiosk-runtime.js',
   'calendar.ics',
@@ -92,7 +93,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  const isKioskCode = /\/(?:display\.html|firebase-config\.js|events-ui\.js|kiosk-runtime\.js)$/.test(url.pathname);
+  const isKioskCode = /\/(?:display\.html|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js)$/.test(url.pathname);
   if (request.mode === 'navigate' || isKioskCode || url.pathname.endsWith('/calendar.ics')) {
     event.respondWith(networkFirst(request));
     return;
