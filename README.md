@@ -22,9 +22,25 @@ Your site will be live at `https://<your-username>.github.io/<repo-name>/`.
 
 ## 2. Firestore security rules
 
-The canonical rules live in [`firestore.rules`](./firestore.rules) — deploy them with the
-Firebase CLI (`firebase deploy --only firestore:rules`) or paste them into
-Firebase console → Firestore Database → Rules.
+The canonical rules live in [`firestore.rules`](./firestore.rules). Two ways to
+deploy them:
+
+**A. Firebase console (no CLI needed)**
+
+1. Open https://console.firebase.google.com/ and select project **pi-base-a3a09**.
+2. Go to **Build → Firestore Database → Rules** tab.
+3. Click **Edit rules**, replace everything with the contents of `firestore.rules`, and click **Publish**.
+
+**B. Firebase CLI**
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use pi-base-a3a09
+firebase deploy --only firestore:rules
+```
+
+(`firebase.json` in this repo already points at `firestore.rules`.)
 
 What changed from the old setup:
 
