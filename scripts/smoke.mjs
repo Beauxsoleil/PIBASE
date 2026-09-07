@@ -21,6 +21,13 @@ globalThis.document = {
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const util = await import(join(root, 'pibase-util.js'));
 
+// Archive compatibility: missing is active; either modern boolean or legacy
+// folder metadata is archived.
+assert.strictEqual(util.isArchived({ name: 'Active' }), false);
+assert.strictEqual(util.isArchived({ archived: false, archiveFolder: null }), false);
+assert.strictEqual(util.isArchived({ archived: true }), true);
+assert.strictEqual(util.isArchived({ archived: false, archiveFolder: 'previousFY' }), true);
+
 // escapeHtml
 assert.strictEqual(util.escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
 assert.strictEqual(util.escapeHtml(null), '');

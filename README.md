@@ -2,6 +2,25 @@
 
 Phone edits, TV displays, Firebase syncs both in real time.
 
+## Applicant archiving
+
+Applicants are never deleted. The phone editor can move a saved applicant into
+the **Cowards** or **Previous FY** archive folder after an explicit confirmation.
+Archived records retain their notes and history, are visually identified inside
+their archive folder, and can be restored to Active Applicants.
+
+All operational surfaces treat archived applicants as inactive: the default
+phone list, TV board, Today screen, reminders, pipeline counts, and mission totals
+exclude them immediately through Firestore's real-time listeners. Missing archive
+fields mean active for backward compatibility; either `archived: true` or a
+legacy nonempty `archiveFolder` means archived.
+
+The private Interview service can add reviewed interview notes and approved
+structured fields through Firebase Admin. It follows the same archive semantics
+and cannot sync to an archived applicant unless the recruiter explicitly chooses
+to restore that record first. The Firebase service-account credential belongs
+only on the Interview server and must never be added to this static-site repo.
+
 ## 1. Deploy to GitHub Pages
 
 ```bash

@@ -22,6 +22,12 @@ export function timestampMillis(v) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+// Missing flags are active by default. Legacy archive-folder records remain
+// archived even if they predate the explicit boolean field.
+export function isArchived(applicant) {
+  return applicant?.archived === true || Boolean(applicant?.archiveFolder);
+}
+
 // "YYYY-MM-DD" -> local-midnight Date, or null when malformed/empty.
 export function parseDateOnly(v) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return null;

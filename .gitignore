@@ -1,0 +1,20 @@
+# Server-side credentials never belong in this static-site repository.
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+firebase-credentials.json
+
+# Local applicant/interview exports and recordings.
+local-test-data/
+*.mp3
+*.wav
+*.m4a
+*.srt
+*.vtt
+*.transcript.txt
+
+# Local tooling.
+node_modules/
+.DS_Store

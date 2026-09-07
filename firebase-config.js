@@ -24,6 +24,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
+import { isArchived } from './pibase-util.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE",
@@ -84,9 +85,7 @@ function enhancementActive() {
 // Archived applicants remain in Firestore so their notes and history stay
 // attached to the original document. Every operational view treats them as
 // inactive, including legacy records that may only have an archive folder.
-export function isArchived(applicant) {
-  return applicant?.archived === true || Boolean(applicant?.archiveFolder);
-}
+export { isArchived };
 
 // Canonical stage name: legacy records may carry "DEP" (Delayed Entry Program),
 // which every screen treats as "Q&E". Normalizing at the data boundary means
