@@ -28,6 +28,16 @@ assert.strictEqual(util.isArchived({ archived: false, archiveFolder: null }), fa
 assert.strictEqual(util.isArchived({ archived: true }), true);
 assert.strictEqual(util.isArchived({ archived: false, archiveFolder: 'previousFY' }), true);
 
+// Review flags are derived from the last update, with a precise 30-day
+// boundary and a createdAt fallback for legacy applicants.
+const now = Date.UTC(2026, 8, 8, 12);
+const daysAgo = days => ({ seconds: Math.floor((now - days * 86_400_000) / 1000) });
+assert.strictEqual(util.applicantNeedsReview({ updatedAt: daysAgo(29) }, now), false);
+assert.strictEqual(util.applicantNeedsReview({ updatedAt: daysAgo(30) }, now), true);
+assert.strictEqual(util.applicantStaleDays({ updatedAt: daysAgo(45) }, now), 45);
+assert.strictEqual(util.applicantNeedsReview({ createdAt: daysAgo(31) }, now), true);
+assert.strictEqual(util.applicantNeedsReview({}, now), false);
+
 // escapeHtml
 assert.strictEqual(util.escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
 assert.strictEqual(util.escapeHtml(null), '');

@@ -2,6 +2,19 @@
 
 Phone edits, TV displays, Firebase syncs both in real time.
 
+## Live kiosk follow-ups
+
+The kiosk's **Today** screen combines today's iCloud calendar events with
+applicant follow-ups that are overdue or due in the next 30 days. Each follow-up
+shows its due date, applicant name, action text, and current pipeline stage.
+Applicant edits arrive through Firestore's real-time listener, so changing an
+action or due date on the phone updates the kiosk without a manual refresh.
+
+An applicant receives the **Review** badge only after their `updatedAt` timestamp
+is at least 30 full days old. Saving the applicant or adding a note refreshes
+that timestamp and removes the badge. Legacy records fall back to `createdAt`;
+records with neither timestamp are not guessed to be stale.
+
 ## Applicant archiving
 
 Applicants are never deleted. The phone editor can move a saved applicant into

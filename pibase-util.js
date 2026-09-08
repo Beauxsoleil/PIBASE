@@ -22,6 +22,22 @@ export function timestampMillis(v) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+export const REVIEW_STALE_DAYS = 30;
+
+// Applicants become review candidates only after their last meaningful update
+// is 30 full days old. Fall back to createdAt for legacy records; if neither
+// timestamp exists, do not show a misleading stale flag.
+export function applicantStaleDays(applicant, now = Date.now()) {
+  const updated = timestampMillis(applicant?.updatedAt)
+    || timestampMillis(applicant?.createdAt);
+  if (!updated) return 0;
+  return Math.max(0, Math.floor((now - updated) / 86_400_000));
+}
+
+export function applicantNeedsReview(applicant, now = Date.now()) {
+  return applicantStaleDays(applicant, now) >= REVIEW_STALE_DAYS;
+}
+
 // Missing flags are active by default. Legacy archive-folder records remain
 // archived even if they predate the explicit boolean field.
 export function isArchived(applicant) {

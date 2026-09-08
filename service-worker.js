@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-kiosk-v3';
+const CACHE_NAME = 'pibase-kiosk-v4';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [

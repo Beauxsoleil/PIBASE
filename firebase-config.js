@@ -24,7 +24,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
-import { isArchived } from './pibase-util.js';
+import { applicantNeedsReview, isArchived } from './pibase-util.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE",
@@ -172,10 +172,7 @@ export const STAGE_SHORT = {
 };
 
 export function needsReview(applicant) {
-  return Boolean(
-    (applicant.physicalHealth && applicant.physicalHealth.trim()) ||
-    (applicant.legalIssues && applicant.legalIssues.trim())
-  );
+  return applicantNeedsReview(applicant);
 }
 
 if (isKiosk && typeof document !== 'undefined') {
