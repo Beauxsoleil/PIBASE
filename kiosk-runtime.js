@@ -152,5 +152,4 @@ export function initKioskRuntime() {
   window.addEventListener('error', () => { state.errors++; if (state.errors >= 3) safeReload('repeated script errors'); });
   window.addEventListener('unhandledrejection', () => { state.errors++; if (state.errors >= 3) safeReload('repeated promise errors'); });
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(error => console.warn('PIBASE offline cache unavailable', error));
 }

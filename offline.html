@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0D1210">
+  <title>PIBASE — Offline</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    main{min-height:100vh;display:grid;place-items:center;padding:24px}.offline-card{width:min(390px,100%);background:var(--surface);border:1px solid var(--line-bright);border-radius:var(--radius);padding:26px}.offline-card h1{font-family:var(--font-display);font-size:1.45rem;margin:5px 0 10px}.offline-card p{color:var(--text-muted);line-height:1.55;font-size:.9rem}.offline-card a{display:block;margin-top:18px;padding:11px 14px;border:1px solid var(--brass);border-radius:4px;color:var(--brass);text-align:center;text-decoration:none}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="offline-card">
+      <div class="eyebrow">PIBASE · Offline</div>
+      <h1>This page is not cached yet.</h1>
+      <p>The previously opened applicant and kiosk screens remain available. Reconnect once to cache this page, then try again.</p>
+      <a href="./index.html">Return to applicants</a>
+    </section>
+  </main>
+  <script type="module" src="./pwa-runtime.js"></script>
+</body>
+</html>

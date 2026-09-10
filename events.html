@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0D1210">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PIBASE">
 <title>APPLEMDT — Events</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/pibase-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/pibase-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -78,5 +86,6 @@ onAuthStateChanged(auth,user=>{if(!user){window.location.href='index.html';retur
 loadCalendarFeed();
 setInterval(loadCalendarFeed,5*60*1000);
 </script>
+<script type="module" src="./pwa-runtime.js"></script>
 </body>
 </html>

@@ -2,6 +2,24 @@
 
 Phone edits, TV displays, Firebase syncs both in real time.
 
+## Installable PWA
+
+PIBASE is an installable Progressive Web App shared by the phone editor and the
+Raspberry Pi kiosk. The manifest supplies the app name, colors, icons, and
+standalone launch behavior. The shared service worker caches the Applicants,
+Events, and kiosk screens along with their application code, calendar snapshot,
+and Firebase browser SDK.
+
+On iPhone, open `index.html` in Safari, tap **Share → Add to Home Screen**, and
+launch PIBASE from the new icon. If an update is ready, the phone displays a
+**Refresh** action so it never reloads over an unsaved form. Offline status is
+shown at the bottom of the phone screen; Firestore continues to provide the last
+cached records and queues supported writes until connectivity returns.
+
+The kiosk installs updates automatically and reloads through its existing safe
+idle-recovery path. `scripts/pwa-smoke.mjs` verifies the manifest, icons, page
+metadata, and offline shell in CI so PWA coverage cannot be removed unnoticed.
+
 ## Live kiosk follow-ups
 
 The kiosk's **Today** screen combines today's iCloud calendar events with
