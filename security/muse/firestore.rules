@@ -1,0 +1,98 @@
+rules_version = '2';
+// Opt-in replacement for the root rules. Bootstrap access documents FIRST.
+// Never put passwords, tokens, or service-account keys in this repository.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function access() {
+      return get(/databases/$(database)/documents/access/$(request.auth.uid)).data;
+    }
+    function enabled() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/access/$(request.auth.uid))
+        && access().get('enabled', false) == true;
+    }
+    function owner() {
+      return enabled() && access().get('role', '') == 'owner'
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    function assistant() {
+      return enabled() && access().get('role', '') == 'assistant'
+        && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+    function reader() {
+      return owner() || (assistant() && access().get('read', false) == true)
+        || (enabled() && access().get('role', '') == 'kiosk');
+    }
+    function writer() {
+      return owner() || (assistant() && access().get('read', false) == true
+        && access().get('write', false) == true);
+    }
+    function attributed() {
+      return request.resource.data.get('updatedBy', '') == request.auth.uid
+        && request.resource.data.get('updatedAt', null) == request.time;
+    }
+    function nonempty(value) {
+      return value is string && value.size() > 0;
+    }
+    function validApplicant() {
+      let d = request.resource.data;
+      return nonempty(d.get('name', ''))
+        && (d.get('age', null) == null || d.age is int)
+        && (d.get('dependents', null) == null || d.dependents is int)
+        && (d.get('phone', null) == null || d.phone is string)
+        && (d.get('email', null) == null || d.email is string)
+        && (d.get('statusStage', null) == null || d.statusStage is string);
+    }
+    function active(d) {
+      return d.get('archived', false) != true
+        && d.get('archiveFolder', null) in [null, ''];
+    }
+    // Only console/Admin provisioning may change roles or the revocation switch.
+    match /access/{uid} {
+      allow read, write: if false;
+    }
+    match /applicants/{id} {
+      allow read: if reader();
+      allow create: if writer() && validApplicant()
+        && (owner() || (attributed() && active(request.resource.data)));
+      allow update: if writer() && validApplicant()
+        && (owner() || (attributed() && active(resource.data)
+          && active(request.resource.data)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['archived', 'archiveFolder', 'archivedAt', 'archivedFiscalYear'])));
+      allow delete: if false;
+      match /notes/{noteId} {
+        allow read: if reader();
+        allow create: if writer() && nonempty(request.resource.data.get('text', ''))
+          && (owner() || (attributed()
+            && request.resource.data.get('createdAt', null) == request.time
+            && active(get(/databases/$(database)/documents/applicants/$(id)).data)));
+        // Assistant notes are append-only; existing history cannot be rewritten.
+        allow update: if owner() && nonempty(request.resource.data.get('text', ''));
+        allow delete: if false;
+      }
+    }
+    match /events/{id} {
+      allow read: if reader();
+      allow create, update: if writer()
+        && nonempty(request.resource.data.get('name', ''))
+        && (request.resource.data.get('date', null) == null || request.resource.data.date is string)
+        && (owner() || attributed());
+      allow delete: if false;
+    }
+    match /eventResults/{id} {
+      allow read: if reader();
+      allow create, update: if writer()
+        && nonempty(request.resource.data.get('summary', ''))
+        && request.resource.data.get('start', null) is string
+        && (owner() || attributed());
+      allow delete: if false;
+    }
+    match /settings/mission {
+      allow read: if reader();
+      allow create, update: if owner();
+      allow delete: if false;
+    }
+    // Unknown collections and settings documents have no allow rule.
+  }
+}

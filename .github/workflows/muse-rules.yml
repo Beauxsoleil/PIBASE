@@ -1,0 +1,25 @@
+name: Muse access rules
+on:
+  push:
+    branches: [main]
+    paths: ['security/muse/**', '.github/workflows/muse-rules.yml']
+  pull_request:
+    paths: ['security/muse/**', '.github/workflows/muse-rules.yml']
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install test dependencies
+        working-directory: security/muse/tests
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test access boundaries against the Firestore emulator
+        working-directory: security/muse
+        run: npx --yes firebase-tools@14.17.0 emulators:exec --project demo-pibase-muse --only firestore 'npm --prefix tests test'

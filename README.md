@@ -196,3 +196,10 @@ public repo. Store it as a repository secret and the sync workflow will use it:
 
 `.github/workflows/ci.yml` syntax-checks every JS module and inline script and
 runs `scripts/smoke.mjs` (parser/date/escape unit tests) on each push/PR.
+
+## Dedicated Muse access (opt-in)
+
+See [the Muse setup guide](security/muse/README.md) for an account allowlist,
+read-only onboarding, revocation switch, and emulator tests. Provision your phone
+and kiosk UIDs before publishing those rules. This adds setup files only; it does
+not change the currently deployed policy or grant any account access.
