@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v5';
+const CACHE_NAME = 'pibase-app-v6';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -12,6 +12,7 @@ const APP_SHELL = [
   'firebase-config.js',
   'pibase-util.js',
   'events-ui.js',
+  'appointment-reminder.js',
   'kiosk-runtime.js',
   'pwa-runtime.js',
   'calendar.ics',
@@ -111,7 +112,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
+  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request).catch(() => caches.match(scopeUrl('offline.html'))));
     return;
@@ -126,3 +127,4 @@ self.addEventListener('fetch', event => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+
