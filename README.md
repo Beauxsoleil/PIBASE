@@ -20,6 +20,21 @@ The kiosk installs updates automatically and reloads through its existing safe
 idle-recovery path. `scripts/pwa-smoke.mjs` verifies the manifest, icons, page
 metadata, and offline shell in CI so PWA coverage cannot be removed unnoticed.
 
+## Daily appointment warning
+
+The kiosk shows **INPUT APPOINTMENTS** each day. On the phone, sign in and
+open the Applicants list, then tap **Dismiss for today** above the mission card.
+The warning clears on connected kiosks in real time and stays dismissed across
+reloads. It returns at midnight in **America/Boise (Mountain time)**, including
+weekends and daylight saving changes. A kiosk started later in the day shows
+that day's warning unless it has already been dismissed.
+
+Dismissals use one non-sensitive document per day under
+`settings/inputAppointments-YYYY-MM-DD` and the existing settings rules; no new
+Firebase rules deployment is needed. Offline phone dismissals display a pending
+message until Firebase confirms the write. An offline kiosk receives the
+dismissal when it reconnects. The warning stays visible if sync fails.
+
 ## Live kiosk follow-ups
 
 The kiosk's **Today** screen combines today's iCloud calendar events with
@@ -203,3 +218,4 @@ See [the Muse setup guide](security/muse/README.md) for an account allowlist,
 read-only onboarding, revocation switch, and emulator tests. Provision your phone
 and kiosk UIDs before publishing those rules. This adds setup files only; it does
 not change the currently deployed policy or grant any account access.
+
