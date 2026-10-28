@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const source = fs.readFileSync(new URL('../appointment-reminder.js', import.meta.url), 'utf8').replaceAll('export function', 'function');
 function surface(isKiosk) {
-  let now = '2026-10-27T14:00:00Z', authChanged, next, fail, tick, click, activeRef, resolveWrite, rejectWrite;
+  let now = '2026-10-27T15:00:00Z', authChanged, next, fail, tick, click, activeRef, resolveWrite, rejectWrite;
   let stopped = 0;
   const button = { disabled: false, addEventListener: (_, fn) => { click = fn; } };
   const status = {};
@@ -36,7 +36,7 @@ phone.snapshot(true);
 phone.resolve();
 await write;
 assert.equal(phone.panel.hidden, true);
-phone.advance('2026-10-28T14:00:01Z');
+phone.advance('2026-10-28T15:00:01Z');
 assert.equal(phone.ref(), 'settings/inputAppointments-2026-10-28');
 phone.snapshot(undefined);
 assert.equal(phone.panel.hidden, false);
@@ -54,7 +54,7 @@ kiosk.snapshot(undefined);
 assert.equal(kiosk.panel.hidden, false);
 kiosk.snapshot(true);
 assert.equal(kiosk.panel.hidden, true);
-kiosk.advance('2026-10-28T14:00:01Z');
+kiosk.advance('2026-10-28T15:00:01Z');
 kiosk.fail();
 assert.equal(kiosk.panel.hidden, false);
 assert.match(kiosk.status.textContent, /unavailable/);
@@ -65,33 +65,33 @@ for (const instant of ['2026-11-01T07:30:00Z', '2026-11-01T08:30:00Z']) {
 assert.equal(kiosk.context.appointmentDay(new Date('2026-10-28T05:59:59Z')), '2026-10-27');
 
 const morning = surface(true);
-morning.advance('2026-10-28T13:59:59Z');
+morning.advance('2026-10-28T14:59:59Z');
 morning.login({ isAnonymous: true });
 morning.snapshot(undefined);
 assert.equal(morning.panel.hidden, true);
-morning.advance('2026-10-28T14:00:00Z');
+morning.advance('2026-10-28T15:00:00Z');
 assert.equal(morning.panel.hidden, false);
 morning.snapshot(true);
 assert.equal(morning.panel.hidden, true);
 morning.advance('2026-10-29T06:00:00Z');
 morning.snapshot(undefined);
 assert.equal(morning.panel.hidden, true);
-morning.advance('2026-10-29T14:00:00Z');
+morning.advance('2026-10-29T15:00:00Z');
 assert.equal(morning.panel.hidden, false);
 for (const [before, at] of [
-  ['2026-03-08T13:59:59Z', '2026-03-08T14:00:00Z'],
-  ['2026-11-01T14:59:59Z', '2026-11-01T15:00:00Z']
+  ['2026-03-08T14:59:59Z', '2026-03-08T15:00:00Z'],
+  ['2026-11-01T15:59:59Z', '2026-11-01T16:00:00Z']
 ]) {
   assert.equal(morning.context.appointmentDue(new Date(before)), false);
   assert.equal(morning.context.appointmentDue(new Date(at)), true);
 }
 const earlyPhone = surface(false);
-earlyPhone.advance('2026-10-28T13:59:59Z');
+earlyPhone.advance('2026-10-28T14:59:59Z');
 earlyPhone.login({ isAnonymous: false });
 earlyPhone.snapshot(undefined);
 assert.equal(earlyPhone.panel.hidden, true);
 assert.equal(earlyPhone.button.disabled, true);
-earlyPhone.advance('2026-10-28T14:00:00Z');
+earlyPhone.advance('2026-10-28T15:00:00Z');
 assert.equal(earlyPhone.button.disabled, false);
 console.log('Appointment reminder smoke OK');
 

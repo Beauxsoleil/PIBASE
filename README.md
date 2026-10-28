@@ -25,7 +25,7 @@ metadata, and offline shell in CI so PWA coverage cannot be removed unnoticed.
 The kiosk shows **INPUT APPOINTMENTS** each day. On the phone, sign in and
 open the Applicants list, then tap **Dismiss for today** above the mission card.
 The warning clears on connected kiosks in real time and stays dismissed across
-reloads. It returns at **8 AM each day** in **America/Boise (Mountain time)**, including
+reloads. It returns at **9 AM each day** in **America/Boise (Mountain time)**, including
 weekends and daylight saving changes. A kiosk started later in the day shows
 that day's warning unless it has already been dismissed.
 
@@ -33,7 +33,7 @@ Dismissals use one non-sensitive document per day under
 `settings/inputAppointments-YYYY-MM-DD` and the existing settings rules; no new
 Firebase rules deployment is needed. Offline phone dismissals display a pending
 message until Firebase confirms the write. An offline kiosk receives the
-dismissal when it reconnects. The warning stays visible after 8 AM if sync fails.
+dismissal when it reconnects. The warning stays visible after 9 AM if sync fails.
 
 ## Live kiosk follow-ups
 

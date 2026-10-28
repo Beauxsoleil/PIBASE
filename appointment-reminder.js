@@ -11,7 +11,7 @@ export function appointmentDue(now = new Date()) {
   const hour = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Boise', hour: '2-digit', hourCycle: 'h23'
   }).formatToParts(now).find(part => part.type === 'hour').value;
-  return Number(hour) >= 8;
+  return Number(hour) >= 9;
 }
 
 export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, setDoc, onAuthStateChanged }) {
@@ -23,7 +23,7 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
   panel.setAttribute('aria-label', 'Daily appointment reminder');
   panel.innerHTML = isKiosk
     ? '<div class="appointment-warning"><h2>INPUT APPOINTMENTS</h2><p>Dismiss today’s warning from PIBASE on your phone.</p><p class="appointment-status" role="status"></p></div>'
-    : '<h2>INPUT APPOINTMENTS</h2><p>Daily kiosk reminder · 8 AM Mountain time</p><button type="button" class="btn btn-secondary">Dismiss for today</button><p class="appointment-status" role="status"></p>';
+    : '<h2>INPUT APPOINTMENTS</h2><p>Daily kiosk reminder · 9 AM Mountain time</p><button type="button" class="btn btn-secondary">Dismiss for today</button><p class="appointment-status" role="status"></p>';
   host.prepend(panel);
   const style = document.createElement('style');
   style.textContent = `
@@ -98,7 +98,7 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
     render();
   });
   onAuthStateChanged(auth, next => { user = next; watchDay(true); });
-  // Covers midnight, 8 AM, an overnight sleeping phone, and reconnects.
+  // Covers midnight, 9 AM, an overnight sleeping phone, and reconnects.
   setInterval(() => watchDay(), 15000);
   document.addEventListener('visibilitychange', () => watchDay());
   window.addEventListener('focus', () => watchDay());
