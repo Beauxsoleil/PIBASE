@@ -17,7 +17,7 @@ jobs:
 
       - name: Syntax-check JS modules
         run: |
-          for f in pibase-util.js firebase-config.js events-ui.js kiosk-runtime.js pwa-runtime.js service-worker.js; do
+          for f in appointment-reminder.js pibase-util.js firebase-config.js events-ui.js kiosk-runtime.js pwa-runtime.js service-worker.js; do
             tmp="$(mktemp --suffix=.mjs)"
             cp "$f" "$tmp"
             node --check "$tmp"
@@ -46,3 +46,7 @@ jobs:
 
       - name: Verify installable PWA shell
         run: node scripts/pwa-smoke.mjs
+
+
+      - name: Verify daily appointment reminder
+        run: node scripts/appointment-reminder-smoke.mjs

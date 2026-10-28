@@ -22,6 +22,7 @@ import {
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initAppointmentReminder } from './appointment-reminder.js';
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
 import { applicantNeedsReview, isArchived } from './pibase-util.js';
@@ -227,4 +228,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   } catch (error) {
     console.warn('PIBASE enhancement UI unavailable', error);
   }
+}
+
+
+// Both surfaces share the daily acknowledgment through existing settings rules.
+if (typeof document !== 'undefined') {
+  const startReminder = () => initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, setDoc, onAuthStateChanged });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startReminder, { once: true });
+  else startReminder();
 }

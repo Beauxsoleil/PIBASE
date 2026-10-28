@@ -8,14 +8,14 @@ The existing phone and kiosk keep their current behavior until you deploy it.
 
 | Role | Reads | Writes |
 | --- | --- | --- |
-| Owner | Applicants, notes, events, results, mission | Existing phone operations; no hard deletes |
+| Owner | Applicants, notes, events, results, mission, daily reminders | Existing phone operations; no hard deletes |
 | Assistant with `read: true` | Entire applicant documents, notes, events, results, mission | None until `write: true` |
 | Assistant with both switches | Same reads | Active applicants, new notes, events/results; attribution required |
 | Enrolled kiosk UID | Same reads | None |
 | Unknown, disabled, or unenrolled anonymous UID | None | None |
 
 Muse cannot archive/restore applicants, edit archived applicants, rewrite existing
-notes, change mission settings, modify roles, or hard-delete records. Owner and
+notes, dismiss daily reminders, change mission settings, modify roles, or hard-delete records. Owner and
 assistant identities must not be anonymous. Assistants must use Email/Password.
 An assistant can edit all other applicant fields, including sensitive fields.
 `updatedBy` records the authenticated UID and `updatedAt` must be a server
@@ -28,6 +28,11 @@ If Muse needs only scheduling, use a separate sanitized collection and a
 different policy before connecting. Revocation prevents future server access;
 it cannot erase records already fetched, cached, or copied by an assistant.
 The public `calendar.ics` feed is outside these rules and remains public.
+
+Daily reminder documents use `settings/inputAppointments-YYYY-MM-DD`. Enrolled
+readers can read them; only the owner can save `{ dismissed: true }` from the
+phone. If this optional policy is already deployed, publish the updated rules
+before using the daily reminder.
 
 ## Setup in the Firebase console
 
