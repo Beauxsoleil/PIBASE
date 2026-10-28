@@ -93,6 +93,16 @@ service cloud.firestore {
       allow create, update: if owner();
       allow delete: if false;
     }
+    // Daily reminder state is readable by enrolled devices; only the phone
+    // owner may acknowledge it. Assistants cannot dismiss the owner's warning.
+    match /settings/{settingId} {
+      allow read: if settingId.matches('inputAppointments-[0-9]{4}-[0-9]{2}-[0-9]{2}') && reader();
+      allow create, update: if settingId.matches('inputAppointments-[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && owner()
+        && request.resource.data.keys().hasOnly(['dismissed'])
+        && request.resource.data.dismissed == true;
+      allow delete: if false;
+    }
     // Unknown collections and settings documents have no allow rule.
   }
 }
