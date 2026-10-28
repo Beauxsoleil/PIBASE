@@ -7,6 +7,13 @@ export function appointmentDay(now = new Date()) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
+export function appointmentDue(now = new Date()) {
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Boise', hour: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now).find(part => part.type === 'hour').value;
+  return Number(hour) >= 8;
+}
+
 export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, setDoc, onAuthStateChanged }) {
   const host = isKiosk ? document.body : document.getElementById('listScreen');
   if (!host) return;
@@ -16,7 +23,7 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
   panel.setAttribute('aria-label', 'Daily appointment reminder');
   panel.innerHTML = isKiosk
     ? '<div class="appointment-warning"><h2>INPUT APPOINTMENTS</h2><p>Dismiss today’s warning from PIBASE on your phone.</p><p class="appointment-status" role="status"></p></div>'
-    : '<h2>INPUT APPOINTMENTS</h2><p>Daily kiosk reminder · Mountain time</p><button type="button" class="btn btn-secondary">Dismiss for today</button><p class="appointment-status" role="status"></p>';
+    : '<h2>INPUT APPOINTMENTS</h2><p>Daily kiosk reminder · 8 AM Mountain time</p><button type="button" class="btn btn-secondary">Dismiss for today</button><p class="appointment-status" role="status"></p>';
   host.prepend(panel);
   const style = document.createElement('style');
   style.textContent = `
@@ -33,15 +40,15 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
   let user = null, day = '', stop = null, generation = 0;
   let loaded = false, dismissed = false, pending = false, failure = '';
   function render() {
-    panel.hidden = !user || (!isKiosk && user.isAnonymous) || (loaded && dismissed && !pending);
-    if (button) button.disabled = !loaded || pending || dismissed;
+    panel.hidden = !appointmentDue() || !user || (!isKiosk && user.isAnonymous) || (loaded && dismissed && !pending);
+    if (button) button.disabled = !appointmentDue() || !loaded || pending || dismissed;
     status.textContent = failure || (pending
       ? 'Dismissal waiting to sync. Keep this app open until connected.'
       : !loaded ? 'Checking today’s reminder…' : '');
   }
   function watchDay(force = false) {
     const next = appointmentDay();
-    if (!force && day === next) return;
+    if (!force && day === next) { render(); return; }
     stop?.();
     stop = null;
     const token = ++generation;
@@ -70,7 +77,8 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
       });
   }
   button?.addEventListener('click', async () => {
-    if (!loaded || pending || dismissed || !user || user.isAnonymous) return;
+    watchDay();
+    if (!appointmentDue() || !loaded || pending || dismissed || !user || user.isAnonymous) return;
     const token = generation;
     const dismissedDay = day;
     pending = true;
@@ -90,7 +98,7 @@ export function initAppointmentReminder({ db, auth, isKiosk, doc, onSnapshot, se
     render();
   });
   onAuthStateChanged(auth, next => { user = next; watchDay(true); });
-  // Covers midnight, an overnight sleeping phone, and reconnects.
+  // Covers midnight, 8 AM, an overnight sleeping phone, and reconnects.
   setInterval(() => watchDay(), 15000);
   document.addEventListener('visibilitychange', () => watchDay());
   window.addEventListener('focus', () => watchDay());
