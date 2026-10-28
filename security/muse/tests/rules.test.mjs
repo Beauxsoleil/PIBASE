@@ -109,3 +109,24 @@ test('all client roles are denied hard deletion and unknown paths', async () => 
     await assertFails(setDoc(doc(client, 'unknown/new'), { text: 'Synthetic' }));
   }
 });
+
+test('daily reminder permits enrolled reads and owner dismissal only', async () => {
+  const path = 'settings/inputAppointments-2026-10-28';
+  await assertSucceeds(setDoc(doc(db('owner'), path), { dismissed: true }));
+  for (const [uid, provider] of [['owner', 'password'], ['muse', 'password'], ['readonly', 'password'], ['kiosk', 'anonymous']]) {
+    await assertSucceeds(getDoc(doc(db(uid, provider), path)));
+  }
+  for (const client of [db('muse'), db('readonly'), db('kiosk', 'anonymous'), db('owner', 'anonymous'), db('unknown'), db('disabled'), env.unauthenticatedContext().firestore()]) {
+    await assertFails(setDoc(doc(client, path), { dismissed: true }));
+  }
+  for (const client of [db('unknown'), db('disabled'), env.unauthenticatedContext().firestore()]) {
+    await assertFails(getDoc(doc(client, path)));
+  }
+  await assertFails(setDoc(doc(db('owner'), path), { dismissed: false }));
+  await assertFails(setDoc(doc(db('owner'), path), { dismissed: true, extra: 'unexpected' }));
+  await assertFails(setDoc(doc(db('owner'), 'settings/inputAppointments-invalid'), { dismissed: true }));
+  await assertFails(setDoc(doc(db('owner'), 'settings/unknown'), { dismissed: true }));
+  await assertFails(deleteDoc(doc(db('owner'), path)));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'access/kiosk'), { enabled: false }));
+  await assertFails(getDoc(doc(db('kiosk', 'anonymous'), path)));
+});
