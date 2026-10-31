@@ -1,6 +1,7 @@
 # Connect Muse to PIBASE
 
-This is an opt-in replacement for the root Firestore rules. It does not create a
+This is the canonical membership-based Firestore policy; root `firebase.json`
+selects it, and root `firestore.rules` is an identical mirror. It does not create a
 Firebase login, deploy rules, configure Muse's vault, or read live applicant data.
 The existing phone and kiosk keep their current behavior until you deploy it.
 
@@ -65,8 +66,7 @@ Open https://console.firebase.google.com/project/pi-base-a3a09.
 
 7. Wait for the **Muse access rules** GitHub check to pass. Save a private copy of
    your currently deployed rules for rollback. In **Firestore Database → Rules**,
-   paste **this directory's `firestore.rules`**, then Publish. The root file is the
-   older policy, so do not paste it for this setup.
+   paste **this directory's `firestore.rules`**, then Publish. The root file is an identical tested mirror; keep both files in sync.
 8. Verify the phone still loads applicants and can save, and the Pi loads its
    live board. An error usually means a missing/mistyped UID or role document.
 9. Enter the Muse account credential only through Muse's secure credential-entry
@@ -87,10 +87,11 @@ cd security/muse
 firebase deploy --project pi-base-a3a09 --only firestore:rules
 ```
 
-The root `firebase.json` still deploys the old rules. Once the new policy is
-verified, change its rules path to `security/muse/firestore.rules` so later root
-deployments cannot revert it accidentally. Do not change that path before the
-access documents are provisioned.
+The root `firebase.json` already points to `security/muse/firestore.rules`.
+Verify live phone/kiosk access records before deploying; repository configuration
+does not prove which policy is currently deployed. Warrior Challenge uses an
+independent collection and membership scope; see
+[shared-project activation](../warrior-challenge/README.md).
 
 ## Instructions to give Muse (contains no credentials)
 

@@ -219,3 +219,12 @@ read-only onboarding, revocation switch, and emulator tests. Provision your phon
 and kiosk UIDs before publishing those rules. This adds setup files only; it does
 not change the currently deployed policy or grant any account access.
 
+
+## Warrior Challenge shared-project integration (prepared, not deployed)
+
+Warrior Challenge can use the same Firebase project under the dedicated
+`warriorChallenges/{competitionId}` collection. Its volunteers receive separate
+Warrior membership records, not recruiting access. Both apps share project Auth
+and database quota; this does not create a separate free allocation.
+See [activation prerequisites and tested permission boundaries](security/warrior-challenge/README.md).
+The existing PIBASE application and hosting are unchanged.

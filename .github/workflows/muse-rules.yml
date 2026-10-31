@@ -1,13 +1,16 @@
-name: Muse access rules
+name: Shared PIBASE access rules
 on:
   push:
     branches: [main]
-    paths: ['security/muse/**', '.github/workflows/muse-rules.yml']
+    paths: ['security/muse/**', 'firestore.rules', 'firebase.json', '.github/workflows/muse-rules.yml']
   pull_request:
-    paths: ['security/muse/**', '.github/workflows/muse-rules.yml']
+    paths: ['security/muse/**', 'firestore.rules', 'firebase.json', '.github/workflows/muse-rules.yml']
+permissions:
+  contents: read
 jobs:
   rules:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
