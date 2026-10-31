@@ -1,5 +1,6 @@
 rules_version = '2';
-// Opt-in replacement for the root rules. Bootstrap access documents FIRST.
+// Shared PIBASE + Warrior Challenge policy. Bootstrap PIBASE access documents FIRST.
+// Canonical file: security/muse/firestore.rules. Root mirror must stay identical.
 // Never put passwords, tokens, or service-account keys in this repository.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -104,5 +105,75 @@ service cloud.firestore {
       allow delete: if false;
     }
     // Unknown collections and settings documents have no allow rule.
+
+    // Warrior Challenge: independent membership, no access/ role inheritance.
+    function wcMember(c) { return get(/databases/$(database)/documents/warriorChallenges/$(c)/members/$(request.auth.uid)).data; }
+    function wcActive(c) { return request.auth != null && exists(/databases/$(database)/documents/warriorChallenges/$(c)/members/$(request.auth.uid)) && wcMember(c).active == true; }
+    function wcAdmin(c) { return wcActive(c) && wcMember(c).role == 'admin'; }
+    function wcStation(c, e) { return wcActive(c) && (wcMember(c).role == 'admin' || e in wcMember(c).eventIds); }
+    function wcSafeId(s) { return s is string && s.matches('^[A-Za-z0-9_-]{1,80}$'); }
+    function wcParent(c, p) { return get(/databases/$(database)/documents/warriorChallenges/$(c)/journal/$(p)).data; }
+    function wcSameParent(c, d, p) {
+      let prior = wcParent(c,p);
+      return wcSafeId(p) && p != d.opId && prior.competitionId == c
+        && prior.eventId == d.eventId && prior.teamId == d.teamId
+        && prior.schemaVersion == 1 && prior.rulesVersion == d.rulesVersion
+        && prior.kind in ['result.submit','result.correct','result.void','result.resolve'];
+    }
+    function wcParents(c,d) {
+      return d.parentIds is list && d.parentIds.size() <= 4
+        && d.parentIds.toSet().size() == d.parentIds.size()
+        && (d.parentIds.size() < 1 || wcSameParent(c,d,d.parentIds[0]))
+        && (d.parentIds.size() < 2 || wcSameParent(c,d,d.parentIds[1]))
+        && (d.parentIds.size() < 3 || wcSameParent(c,d,d.parentIds[2]))
+        && (d.parentIds.size() < 4 || wcSameParent(c,d,d.parentIds[3]));
+    }
+    function wcValidKind(c,d) {
+      let official = wcAdmin(c);
+      return (d.kind == 'result.submit' && d.parentIds.size() == 0)
+        || (d.kind == 'result.void' && d.parentIds.size() == 1
+            && (official || (wcParent(c,d.parentIds[0]).actorUid == request.auth.uid && wcParent(c,d.parentIds[0]).kind != 'result.void')))
+        || (d.kind == 'result.correct' && d.parentIds.size() == 1
+            && (official || (wcParent(c,d.parentIds[0]).kind == 'result.void' && wcParent(c,d.parentIds[0]).actorUid == request.auth.uid)))
+        || (d.kind == 'result.resolve' && d.parentIds.size() >= 2 && official);
+    }
+    function wcPayload(d,e) {
+      return d.payload is map && d.payload.reason is string && d.payload.reason.size() <= 500
+        && (d.kind == 'result.submit' || d.payload.reason.size() >= 1)
+        && ((d.kind == 'result.void' && d.payload.keys().hasOnly(['reason']) && d.payload.keys().hasAll(['reason']))
+          || (d.kind != 'result.void' && d.payload.keys().hasOnly(['value','reason']) && d.payload.keys().hasAll(['value','reason'])
+            && d.payload.value is int && d.payload.value >= e.minimum && d.payload.value <= e.maximum));
+    }
+    function wcValid(c,op,d) {
+      let config = get(/databases/$(database)/documents/warriorChallenges/$(c)).data;
+      let event = get(/databases/$(database)/documents/warriorChallenges/$(c)/events/$(d.eventId)).data;
+      let team = get(/databases/$(database)/documents/warriorChallenges/$(c)/teams/$(d.teamId)).data;
+      return d.keys().hasOnly(['opId','competitionId','eventId','teamId','schemaVersion','rulesVersion','actorUid','deviceId','sessionId','capturedAtClientMs','kind','parentIds','payload','receivedAt'])
+        && d.keys().hasAll(['opId','competitionId','eventId','teamId','schemaVersion','rulesVersion','actorUid','deviceId','sessionId','capturedAtClientMs','kind','parentIds','payload','receivedAt'])
+        && wcSafeId(op) && d.opId == op && d.competitionId == c
+        && wcSafeId(d.eventId) && wcSafeId(d.teamId) && wcSafeId(d.deviceId) && wcSafeId(d.sessionId)
+        && d.actorUid == request.auth.uid && d.schemaVersion == 1 && d.rulesVersion == 'practice-v1'
+        && config.mode == 'practice' && config.rulesVersion == d.rulesVersion
+        && team.eligible == true && team.rosterVersion == config.rosterVersion
+        && event.kind == 'numeric' && event.minimum == 0 && event.maximum == 100
+        && event.state in ['open','closing'] && wcStation(c,d.eventId)
+        && d.capturedAtClientMs is int && d.capturedAtClientMs >= 0 && d.capturedAtClientMs <= 9007199254740991
+        && d.receivedAt == request.time && wcParents(c,d) && wcValidKind(c,d) && wcPayload(d,event);
+    }
+    match /warriorChallenges/{c} {
+      allow read: if wcActive(c);
+      match /members/{uid} { allow read: if wcActive(c) && (uid == request.auth.uid || wcAdmin(c)); }
+      match /teams/{id} { allow read: if wcActive(c); }
+      match /events/{id} { allow read: if wcStation(c,id); }
+      match /journal/{op} {
+        // Missing-ID reads permit idempotency checks, not enumeration of private data.
+        allow get: if wcActive(c) && (!exists(/databases/$(database)/documents/warriorChallenges/$(c)/journal/$(op)) || wcStation(c,resource.data.eventId));
+        allow list: if wcStation(c,resource.data.eventId);
+        allow create: if wcActive(c) && wcValid(c,op,request.resource.data);
+        allow update, delete: if false;
+      }
+      // Publication is deliberately closed until M4's atomic protocol is implemented.
+    }
+    match /{path=**} { allow read, write: if false; }
   }
 }

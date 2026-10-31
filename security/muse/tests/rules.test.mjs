@@ -130,3 +130,61 @@ test('daily reminder permits enrolled reads and owner dismissal only', async () 
   await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'access/kiosk'), { enabled: false }));
   await assertFails(getDoc(doc(db('kiosk', 'anonymous'), path)));
 });
+
+// Shared-project regression: synthetic records only, same emulator as PIBASE.
+async function seedWarrior() {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const d = ctx.firestore();
+    const records = {
+      'warriorChallenges/practice': { mode: 'practice', rulesVersion: 'practice-v1', rosterVersion: 'synthetic-v1' },
+      'warriorChallenges/practice/events/grenade': { kind: 'numeric', minimum: 0, maximum: 100, state: 'open' },
+      'warriorChallenges/practice/teams/A': { eligible: true, rosterVersion: 'synthetic-v1' },
+      'warriorChallenges/practice/members/wc-scorer': { active: true, role: 'scorer', eventIds: ['grenade'] },
+      'warriorChallenges/practice/members/wc-admin': { active: true, role: 'admin', eventIds: ['grenade'] },
+    };
+    for (const [path, data] of Object.entries(records)) await setDoc(doc(d,path),data);
+  });
+}
+function warriorOperation(uid, id = 'score') {
+  return { opId:id, competitionId:'practice', eventId:'grenade', teamId:'A',
+    schemaVersion:1, rulesVersion:'practice-v1', actorUid:uid, deviceId:'synthetic-device',
+    sessionId:'synthetic-session', capturedAtClientMs:100, kind:'result.submit',
+    parentIds:[], payload:{value:50,reason:''}, receivedAt:serverTimestamp() };
+}
+test('Warrior members can score but cannot access any PIBASE private collection', async () => {
+  await seedWarrior();
+  for (const uid of ['wc-scorer','wc-admin']) {
+    const client = db(uid);
+    await assertSucceeds(getDoc(doc(client,'warriorChallenges/practice')));
+    await assertSucceeds(setDoc(doc(client,'warriorChallenges/practice/journal',uid),warriorOperation(uid,uid)));
+    for (const path of ['applicants/a','applicants/a/notes/old','events/new','eventResults/new','settings/mission','settings/inputAppointments-2026-10-28','access/owner']) {
+      await assertFails(getDoc(doc(client,path)));
+      await assertFails(setDoc(doc(client,path),{name:'Synthetic',text:'Synthetic',summary:'Synthetic',start:'2026-10-31'}));
+    }
+    await assertFails(setDoc(doc(client,'access',uid),{role:'owner',enabled:true}));
+  }
+});
+test('PIBASE owner, assistant and kiosk do not inherit Warrior membership', async () => {
+  await seedWarrior();
+  for (const [uid,provider] of [['owner','password'],['muse','password'],['kiosk','anonymous']]) {
+    const client=db(uid,provider);
+    await assertFails(getDoc(doc(client,'warriorChallenges/practice')));
+    await assertFails(setDoc(doc(client,'warriorChallenges/practice/journal',uid),warriorOperation(uid,uid)));
+    await assertFails(setDoc(doc(client,'warriorChallenges/practice/members',uid),{role:'admin',active:true,eventIds:['grenade']}));
+  }
+});
+test('dual membership is deliberate and revoking Warrior access does not revoke PIBASE', async () => {
+  await seedWarrior();
+  await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'warriorChallenges/practice/members/owner'),{active:true,role:'admin',eventIds:['grenade']}));
+  const client=db('owner');
+  await assertSucceeds(getDoc(doc(client,'applicants/a')));
+  await assertSucceeds(setDoc(doc(client,'warriorChallenges/practice/journal/owner'),warriorOperation('owner','owner')));
+  await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'warriorChallenges/practice/members/owner'),{active:false}));
+  await assertFails(getDoc(doc(client,'warriorChallenges/practice')));
+  await assertSucceeds(getDoc(doc(client,'applicants/a')));
+});
+test('root deploy mirror cannot accidentally restore the legacy signed-in policy', async () => {
+  const canonical=await readFile(new URL('../firestore.rules',import.meta.url),'utf8');
+  const root=await readFile(new URL('../../../firestore.rules',import.meta.url),'utf8');
+  const { strictEqual }=await import('node:assert');strictEqual(root,canonical);
+});
