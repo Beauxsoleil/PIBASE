@@ -1,0 +1,30 @@
+name: Legacy iPad checks
+on:
+  pull_request:
+    paths:
+      - ipad.html
+      - scripts/ipad-*.mjs
+      - .github/workflows/ipad-check.yml
+permissions:
+  contents: read
+jobs:
+  legacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/ipad-smoke.mjs
+      - name: Install syntax parser only (not bundled into app)
+        run: npm install --prefix "$RUNNER_TEMP/ipad-tools" --no-audit --no-fund acorn@8.15.0
+      - name: Check handwritten script is ES5
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const acorn = require(process.env.RUNNER_TEMP + '/ipad-tools/node_modules/acorn');
+          const html = fs.readFileSync('ipad.html', 'utf8');
+          acorn.parse(html.match(/<script>([\s\S]*?)<\/script>/)[1], {ecmaVersion: 5});
+          console.log('ES5 syntax OK');
+          JS

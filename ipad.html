@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="PIBASE Display">
+<link rel="apple-touch-icon" href="./icons/pibase-192.png">
+<title>PIBASE — iPad Display</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1210;color:#e9e6dc;font-family:Arial,sans-serif}header{height:90px;margin:0 22px;border-bottom:1px solid #3d4c41;padding:16px 0}h1{font-size:30px;margin:0;color:#c6a15b;letter-spacing:3px}h2{font-size:24px;margin:0 0 12px}h3{margin:0 0 10px;font-size:22px}p{margin:8px 0;line-height:1.4}.right{float:right;text-align:right}.muted{color:#9aaa9f;font-size:15px}.badge{color:#f1bd54;font-size:14px;margin-left:10px}.warning{color:#f1bd54}#content{position:absolute;top:106px;bottom:62px;left:22px;right:22px;overflow:hidden}#viewport{height:100%;overflow:hidden}#inner{padding-bottom:8px}.card{float:left;width:48%;margin:0 2% 14px 0;padding:18px;border:1px solid #3d4c41;border-radius:6px;background:#1a231d}.card.flagged{border-color:#c6a15b}.name{font-size:23px;font-weight:bold;word-wrap:break-word}.meta{color:#9aaa9f;margin:10px 0;font-size:15px}.rail{display:-webkit-flex;display:flex;margin:18px 0}.node{-webkit-flex:1;flex:1;text-align:center;border-top:3px solid #3d4c41;padding-top:9px;font-size:10px;color:#9aaa9f}.node.done{border-color:#4fa88a;color:#4fa88a}.node.current{border-color:#c6a15b;color:#f1bd54;font-weight:bold}.note{border-top:1px solid #3d4c41;padding-top:10px;white-space:pre-wrap;word-wrap:break-word;font-size:17px;line-height:1.45}.label{display:block;font-size:11px;color:#9aaa9f;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}.panel{padding:20px;background:#1a231d;border:1px solid #3d4c41;border-radius:6px;margin-bottom:14px}.row{padding:14px 0;border-bottom:1px solid #3d4c41;word-wrap:break-word}.big{font-size:54px;color:#c6a15b}.bar{height:10px;background:#3d4c41;margin-top:8px}.fill{height:10px;background:#4fa88a}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px 9px;border-bottom:1px solid #3d4c41}footer{position:absolute;bottom:0;left:0;right:0;height:52px;padding:8px 22px;border-top:1px solid #3d4c41;background:#141b17;font-size:12px}button,input{font:inherit}button{background:#26352b;color:#e9e6dc;border:1px solid #6d806f;padding:12px;min-height:44px;border-radius:4px}#signout{float:right;min-height:34px;padding:5px 12px}#login{position:absolute;z-index:3;top:100px;left:15%;width:70%;padding:24px;background:#1a231d;border:1px solid #c6a15b;border-radius:6px}#login input[type=email],#login input[type=password]{display:block;width:100%;margin:6px 0 14px;padding:12px;background:#0d1210;color:#fff;border:1px solid #6d806f}#login label{display:block;margin:10px 0}#loginMessage{min-height:24px;color:#f1bd54}#debug{color:#f1bd54}.clear{clear:both}#reminder{color:#f1bd54;font-size:13px;margin-top:5px}#login[hidden],button[hidden]{display:none}
+</style>
+</head>
+<body>
+<header><div class="right"><div id="clock"></div><div class="muted" id="section">Read-only display</div><div id="reminder"></div></div><h1>PIBASE</h1><div class="muted">Recruiting command board · Legacy iPad</div></header>
+<div id="content"><div id="viewport"><div id="inner"><div class="panel">Sign in with your existing PIBASE account to load the display.</div></div></div></div>
+<form id="login"><h2>Display sign-in</h2><p>This page only reads data. Your account keeps its existing permissions.</p><label>Email<input id="email" type="email" autocapitalize="none" autocorrect="off" required></label><label>Password<input id="password" type="password" required></label><label><input id="remember" type="checkbox" checked> Keep me signed in on this controlled iPad</label><button id="signin" type="submit">Sign in</button><div id="loginMessage" role="status"></div><p class="muted">Launch from the Home Screen before signing in. No password is saved by this page.</p><p class="muted">15-second polling shares PIBASE’s read quota. Check usage before leaving this running all day.</p></form>
+<footer><button id="signout" hidden>Sign out</button><div id="status" role="status">Waiting for sign-in · No data downloaded yet</div><div id="debug">If this message stays after sign-in, JavaScript has not started.</div></footer>
+<noscript>JavaScript must be enabled to run this display.</noscript>
+<script>
+/* Handwritten ES5. No SDK, bundler, Firestore writes, or shared-app session changes. */
+(function () {
+  'use strict';
+  var API_KEY = 'AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE'; // Public Firebase identifier, not authorization.
+  var BASE = 'https://firestore.googleapis.com/v1/projects/pi-base-a3a09/databases/(default)/documents/';
+  var AUTH_KEY = 'pibase.ipad.v1.session';
+  var STAGES = ['Initial Appointment','Packet Prep','Processing Authorized','Processing Scheduled','Waiver','Q&E','Enlisted'];
+  var SHORT = ['INITIAL','PACKET',"AUTH'D",'SCHED','WAIVER','Q&E','ENLISTED'];
+  var session = null, generation = 0, busy = false, lastGood = 0, failure = '', storageWarning = '';
+  var state = { applicants: [], mission: {}, events: [], results: [], reminder: {}, reminderDay: '' };
+  var calendar = [], calendarGood = 0, calendarFailed = false, calendarBusy = false;
+  var slides = [], slide = 0, dwell = 0, scrollHold = 0, lastReloadDay = '', refreshRetries = 0;
+  var $ = function (id) { return document.getElementById(id); };
+  var own = function (o,k) { return Object.prototype.hasOwnProperty.call(o,k); };
+  var esc = function (v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); };
+  var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+  var dateKey = function (d) { return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
+  var stamp = function (v) { var n = Date.parse(v || ''); return isNaN(n) ? 0 : n; };
+  // America/Boise, US DST rules in force since 2007; avoids unavailable Intl APIs.
+  function mountainNow() {
+    var now = new Date(), y = now.getUTCFullYear();
+    var marchSunday = 1 + (7-new Date(Date.UTC(y,2,1)).getUTCDay())%7 + 7;
+    var novemberSunday = 1 + (7-new Date(Date.UTC(y,10,1)).getUTCDay())%7;
+    var dst = now.getTime() >= Date.UTC(y,2,marchSunday,9) && now.getTime() < Date.UTC(y,10,novemberSunday,8);
+    var shifted = new Date(now.getTime()+(dst ? -6 : -7)*3600000);
+    return {day:shifted.getUTCFullYear()+'-'+pad(shifted.getUTCMonth()+1)+'-'+pad(shifted.getUTCDate()),hour:shifted.getUTCHours()};
+  }
+  var dayStart = function () { var d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+  var review = function (a) { var t = stamp(a.updatedAt) || stamp(a.createdAt); return t > 0 && Date.now()-t >= 30*86400000; };
+  var dayDate = function (v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? new Date(+m[1],+m[2]-1,+m[3]).getTime() : stamp(v); };
+  function stored(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function remove(key) { try { localStorage.removeItem(key); } catch (e) { /* private mode */ } }
+  function saveSession() {
+    remove(AUTH_KEY);
+    if (session && session.remember) {
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify({ refreshToken:session.refreshToken, uid:session.uid, remember:true })); }
+      catch (e) { storageWarning = 'Session cannot be saved; sign in again after reopening.'; }
+    }
+  }
+  window.onerror = function (message, source, line) {
+    $('debug').textContent = 'Display script error at line ' + (line || '?') + '. Reload when connected; inspect with Safari Web Inspector.';
+    return true; // No raw server response, applicant text, password or token in diagnostics.
+  };
+  $('debug').textContent = '';
+  function request(method,url,body,token,form,done,plain) {
+    var xhr = new XMLHttpRequest(), finished = false;
+    function finish(status,value) { if (finished) return; finished = true; done(status,value); }
+    xhr.open(method,url,true);
+    xhr.timeout = 12000;
+    if (token) xhr.setRequestHeader('Authorization','Bearer ' + token);
+    if (body != null) xhr.setRequestHeader('Content-Type',form ? 'application/x-www-form-urlencoded' : 'application/json');
+    xhr.onload = function () {
+      var value;
+      try { value = plain ? xhr.responseText : JSON.parse(xhr.responseText || '{}'); }
+      catch (e) { finish(502,{}); return; }
+      finish(xhr.status,value);
+    };
+    xhr.onerror = xhr.ontimeout = xhr.onabort = function () { finish(0,{}); };
+    try { xhr.send(body); } catch (e) { finish(0,{}); }
+  }
+  function decode(v) {
+    var n;
+    if (own(v,'nullValue')) return null;
+    if (own(v,'stringValue')) return v.stringValue;
+    if (own(v,'integerValue')) { n = Number(v.integerValue); return Math.abs(n) <= 9007199254740991 ? n : v.integerValue; }
+    if (own(v,'doubleValue')) return Number(v.doubleValue);
+    if (own(v,'booleanValue')) return v.booleanValue;
+    if (own(v,'timestampValue')) return v.timestampValue;
+    if (own(v,'referenceValue')) return v.referenceValue;
+    if (own(v,'bytesValue')) return v.bytesValue;
+    if (own(v,'geoPointValue')) return {latitude:v.geoPointValue.latitude,longitude:v.geoPointValue.longitude};
+    if (own(v,'arrayValue')) return (v.arrayValue.values || []).map(decode);
+    if (own(v,'mapValue')) return fields(v.mapValue.fields || {});
+    throw new Error('Unsupported Firestore value');
+  }
+  function fields(source) {
+    var out = Object.create(null), k;
+    for (k in source) if (own(source,k)) out[k] = decode(source[k]);
+    return out;
+  }
+  function documentValue(d) { var out = fields(d.fields || {}); out.id = (d.name || '').split('/').pop(); return out; }
+  function readCollection(path,token,done) {
+    var rows = [], seen = Object.create(null), count = 0;
+    function page(cursor) {
+      var url = BASE + path + '?pageSize=300';
+      if (cursor) url += '&pageToken=' + encodeURIComponent(cursor);
+      request('GET',url,null,token,false,function (code,data) {
+        if (code !== 200) { done(code); return; }
+        try { rows = rows.concat((data.documents || []).map(documentValue)); }
+        catch (e) { done(502); return; }
+        if (data.nextPageToken) {
+          if (seen[data.nextPageToken] || ++count > 100) { done(502); return; }
+          seen[data.nextPageToken] = true;
+          page(data.nextPageToken);
+        } else done(200,rows);
+      });
+    }
+    page('');
+  }
+  function readDocument(path,token,done) {
+    request('GET',BASE+path,null,token,false,function (code,data) {
+      if (code === 404) { done(200,{}); return; }
+      if (code !== 200) { done(code); return; }
+      try { done(200,documentValue(data)); } catch (e) { done(502); }
+    });
+  }
+  function status() {
+    var text = failure || (session ? 'Connected · Read-only' : 'Sign-in required');
+    text += lastGood ? ' · Last updated ' + new Date(lastGood).toLocaleString() : ' · No data downloaded yet';
+    if (calendarFailed) text += ' · Calendar offline, retrying';
+    if (storageWarning) text += ' · ' + storageWarning;
+    $('status').textContent = text;
+    $('clock').textContent = new Date().toLocaleString();
+    var mountain = mountainNow(), due = mountain.hour >= 9;
+    $('reminder').textContent = session && due && !(state.reminderDay === mountain.day && state.reminder.dismissed === true) ? 'INPUT APPOINTMENTS — dismiss on phone' : '';
+  }
+  function needLogin() {
+    generation++; busy = false; calendarBusy = false; session = null; remove(AUTH_KEY);
+    $('login').hidden = false; $('signout').hidden = false;
+    $('loginMessage').textContent = 'Session expired. Sign in again. Previous display is retained until sign-out.';
+    failure = 'Sign-in required'; status();
+  }
+  function ensureToken(done) {
+    var gen = generation;
+    if (!session) { done(false); return; }
+    if (session.idToken && session.expires > Date.now()+60000) { done(true); return; }
+    request('POST','https://securetoken.googleapis.com/v1/token?key='+API_KEY,
+      'grant_type=refresh_token&refresh_token='+encodeURIComponent(session.refreshToken),null,true,function (code,data) {
+        if (gen !== generation) return;
+        if (code === 200 && data.id_token && data.refresh_token && data.user_id === session.uid) {
+          session.idToken = data.id_token; session.refreshToken = data.refresh_token;
+          session.expires = Date.now()+Number(data.expires_in)*1000; saveSession(); done(true);
+        } else {
+          if (code === 400 || code === 401 || code === 403 || code === 200) needLogin();
+          else failure = 'Offline, retrying';
+          done(false);
+        }
+      });
+  }
+  function poll() {
+    if (busy || !session) return;
+    busy = true;
+    var gen = generation;
+    ensureToken(function (ok) {
+      if (gen !== generation) return;
+      if (!ok) { busy = false; status(); return; }
+      var token = session.idToken, next = {}, day = mountainNow().day;
+      var jobs = [ ['applicants',readCollection,'applicants'], ['mission',readDocument,'settings/mission'], ['events',readCollection,'events'], ['results',readCollection,'eventResults'], ['reminder',readDocument,'settings/inputAppointments-'+day] ];
+      var left = jobs.length, error = 0;
+      jobs.forEach(function (job) {
+        job[1](job[2],token,function (code,value) {
+          if (gen !== generation) return;
+          if (code !== 200) error = code === 401 || code === 403 ? code : (error || code || -1);
+          else next[job[0]] = value;
+          left--;
+          if (left) return;
+          busy = false;
+          if (error) {
+            if (error === 401 && refreshRetries < 1) { session.expires = 0; refreshRetries++; poll(); return; }
+            failure = error === 403 ? 'Access denied — check account permissions / App Check' : error === 401 ? 'Sign-in required' : 'Offline, retrying';
+            if (error === 401) needLogin();
+          } else {
+            refreshRetries = 0;
+            next.applicants = next.applicants.filter(function (a) { return a.archived !== true && !a.archiveFolder && own(a,'updatedAt'); });
+            next.applicants.forEach(function (a) { if (a.statusStage === 'DEP') a.statusStage = 'Q&E'; });
+            next.applicants.sort(function (a,b) { return stamp(b.updatedAt)-stamp(a.updatedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+            next.reminderDay = day; state = next; lastGood = Date.now(); failure = ''; rebuild();
+          }
+          status();
+        });
+      });
+    });
+  }
+  $('login').onsubmit = function (event) {
+    event.preventDefault();
+    if ($('signin').disabled) return;
+    var email = $('email').value, password = $('password').value, remember = $('remember').checked;
+    var gen = ++generation;
+    busy = false; calendarBusy = false; session = null; remove(AUTH_KEY);
+    state = {applicants:[],mission:{},events:[],results:[],reminder:{},reminderDay:''};
+    calendar = []; calendarGood = 0; calendarFailed = false; lastGood = 0; slides = []; slide = 0;
+    $('inner').innerHTML = '<div class="panel">Signing in…</div>';
+    $('signin').disabled = true; $('loginMessage').textContent = 'Signing in…';
+    request('POST','https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+API_KEY,
+      JSON.stringify({email:email,password:password,returnSecureToken:true}),null,false,function (code,data) {
+        if (gen !== generation) return;
+        $('signin').disabled = false; $('password').value = '';
+        if (code === 200 && data.idToken && data.refreshToken && data.localId) {
+          session = {idToken:data.idToken,refreshToken:data.refreshToken,uid:data.localId,expires:Date.now()+Number(data.expiresIn)*1000,remember:remember};
+          saveSession(); $('login').hidden = true; $('signout').hidden = false;
+          $('loginMessage').textContent = ''; failure = ''; poll(); loadCalendar();
+        } else {
+          $('loginMessage').textContent = code === 0 ? 'Network unavailable. Try again when connected.' : 'Sign-in failed. Check email/password and account access. MFA, if required, is not supported by this display.';
+          failure = 'Sign-in required'; status();
+        }
+      });
+    password = '';
+  };
+  $('signout').onclick = function () {
+    generation++; session = null; busy = false; calendarBusy = false; remove(AUTH_KEY);
+    slides = []; calendar = []; calendarGood = 0; calendarFailed = false; slide = 0; lastGood = 0; failure = ''; storageWarning = '';
+    state = {applicants:[],mission:{},events:[],results:[],reminder:{},reminderDay:''};
+    $('inner').innerHTML = '<div class="panel">Signed out. Display data cleared.</div>';
+    $('login').hidden = false; $('signout').hidden = true; $('signin').disabled = false;
+    $('password').value = ''; $('email').value = ''; $('loginMessage').textContent = ''; status();
+  };
+  function rail(stage) {
+    var index = STAGES.indexOf(stage || STAGES[0]);
+    return '<div class="rail">' + SHORT.map(function (s,i) { return '<div class="node '+(i < index ? 'done' : i === index ? 'current' : '')+'">'+esc(s)+'</div>'; }).join('') + '</div>';
+  }
+  function card(a) {
+    var meta = [a.age ? a.age+' yo' : '',a.generalArea,a.priorService,a.educationLevel].filter(Boolean).map(esc).join(' · ');
+    return '<article class="card '+(review(a) ? 'flagged' : '')+'"><div class="name">'+esc(a.name || 'Unnamed')+'</div><div class="badge">'+(review(a) ? 'Review · ' : '')+esc(a.statusStage === 'Waiver' ? a.waiverType || '' : '')+'</div><div class="meta">'+meta+'</div>'+rail(a.statusStage)+(a.latestNote ? '<div class="note"><span class="label">Latest note</span>'+esc(a.latestNote)+'</div>' : '')+'</article>';
+  }
+  function panel(title,body) { return '<div class="panel"><h2>'+esc(title)+'</h2>'+body+'</div>'; }
+  function row(title,detail) { return '<div class="row"><h3>'+esc(title)+'</h3><div class="note">'+esc(detail)+'</div></div>'; }
+  function addPages(target,title,items,size,renderer) {
+    var i;
+    if (!items.length) { target.push({title:title,html:panel(title,'No entries to display.')}); return; }
+    for (i=0;i<items.length;i+=size) target.push({title:title+' · '+(Math.floor(i/size)+1)+' / '+Math.ceil(items.length/size),html:items.slice(i,i+size).map(renderer).join('')+'<div class="clear"></div>'});
+  }
+  function rebuild() {
+    var next = [], a = state.applicants, now = new Date(), today = dayStart(), follow = [], counts = {}, areas = {};
+    var fy = Number(state.mission.fiscalYear) || (now.getMonth() >= 9 ? now.getFullYear()+1 : now.getFullYear());
+    var target = Math.max(0,Number(state.mission.target)||0), enlisted, remaining, events, summary;
+    STAGES.forEach(function (s) { counts[s] = 0; });
+    ['Twin Falls','Burley','Rupert','Filer','Other','Unassigned'].forEach(function (s) { areas[s] = [0,0,0,0]; });
+    a.forEach(function (v) {
+      var due = dayDate(v.nextActionDate), area = String(v.generalArea || v.area || v.location || '').trim(), group;
+      if (own(counts,v.statusStage)) counts[v.statusStage]++;
+      if (!area) area = 'Unassigned'; else if (!own(areas,area)) area = 'Other';
+      group = v.statusStage === 'Enlisted' ? 3 : v.statusStage === 'Q&E' ? 2 : ['Processing Authorized','Processing Scheduled','Waiver'].indexOf(v.statusStage) >= 0 ? 1 : 0;
+      areas[area][group]++;
+      if (v.nextAction && due && due <= today+30*86400000) follow.push({time:due,title:v.name || 'Unnamed',detail:(due < today ? 'OVERDUE · ' : '')+v.nextActionDate+' · '+v.nextAction+' · '+(v.statusStage || '')});
+    });
+    addPages(next,'Applicants ('+a.length+')',a,4,card);
+    calendar.forEach(function (e) { if (e.time >= today && e.time < today+86400000) follow.push({time:e.time,title:e.title,detail:e.when+' · '+e.location}); });
+    follow.sort(function (x,y) { return x.time-y.time; });
+    addPages(next,'Today / Follow-ups',follow,5,function (e) { return panel(e.title,esc(e.detail)); });
+    addPages(next,'Calendar · next 7 days'+(calendarFailed ? ' · cached' : ''),calendar.filter(function (e) { return e.time >= today && e.time < today+7*86400000; }),5,function (e) { return panel(e.title,esc(e.when+' · '+e.location)); });
+    enlisted = counts.Enlisted; remaining = Math.max(0,target-enlisted);
+    summary = '<div class="big">'+enlisted+' / '+(target || '—')+'</div><p>'+remaining+' remaining · '+(target ? Math.round(enlisted/target*100)+'%' : 'Target not set')+' · '+(a.length-enlisted)+' active</p>';
+    summary += STAGES.map(function (s) { return '<div class="row">'+esc(s)+' <strong class="right">'+counts[s]+'</strong><div class="bar"><div class="fill" style="width:'+(a.length ? counts[s]/a.length*100 : 0)+'%"></div></div></div>'; }).join('');
+    next.push({title:'Pipeline / Mission',html:panel('FY'+String(fy).slice(-2)+' Recruiting Mission',summary)});
+    events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts,resultNotes:r.resultNotes}; }));
+    events.sort(function (x,y) { return dayDate(y.date)-dayDate(x.date); });
+    addPages(next,'Recruiting Events / Results',events,4,function (e) { return panel(e.name || 'Unnamed event',esc([e.date,e.type,e.location,e.poc].filter(Boolean).join(' · '))+'<p>'+esc(Number(e.leads)||0)+' leads · '+esc(Number(e.appointments)||0)+' appts · '+esc(Number(e.qualified)||0)+' qualified · '+esc(Number(e.contracts)||0)+' contracts</p><div class="note">'+esc(e.resultNotes || '')+'</div>'); });
+    summary = '<table><thead><tr><th>Area</th><th>Early</th><th>Processing</th><th>Q&amp;E</th><th>Enlisted</th></tr></thead><tbody>';
+    Object.keys(areas).forEach(function (area) { summary += '<tr><td>'+esc(area)+'</td>'+areas[area].map(function (n) { return '<td>'+n+'</td>'; }).join('')+'</tr>'; });
+    next.push({title:'Territory',html:panel('Applicants by area',summary+'</tbody></table>')});
+    slides = next; if (slide >= slides.length) slide = 0; render();
+  }
+  function render() {
+    if (!slides.length) return;
+    var s = slides[slide];
+    $('section').textContent = s.title;
+    // Keep scrolling position when a poll yields the same visible content.
+    if ($('inner').getAttribute('data-content') !== s.html) {
+      $('inner').innerHTML = s.html; $('inner').setAttribute('data-content',s.html);
+      $('viewport').scrollTop = 0; dwell = 0; scrollHold = 0;
+    }
+  }
+  function rotate() {
+    if (!slides.length || !$('login').hidden) return;
+    var view = $('viewport'), max = view.scrollHeight-view.clientHeight;
+    dwell++;
+    if (max > 2) {
+      if (dwell > 30 && view.scrollTop < max-1) view.scrollTop += 4;
+      else if (view.scrollTop >= max-1) { scrollHold++; if (scrollHold < 40) return; }
+      if (view.scrollTop < max-1) return;
+      if (scrollHold < 40) return;
+    } else if (dwell < 120) return;
+    slide = (slide+1)%slides.length; dwell = 0; scrollHold = 0; $('inner').removeAttribute('data-content'); render();
+  }
+  function icsDate(v) {
+    var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(v || '');
+    if (!m) return null;
+    return m[7] ? new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4]||0,+m[5]||0,+m[6]||0)) : new Date(+m[1],+m[2]-1,+m[3],+m[4]||0,+m[5]||0,+m[6]||0);
+  }
+  function parseCalendar(text) {
+    if (text.indexOf('BEGIN:VCALENDAR') < 0 || text.indexOf('END:VCALENDAR') < 0) throw new Error('Invalid calendar');
+    return text.replace(/\r?\n[ \t]/g,'').split('BEGIN:VEVENT').slice(1).map(function (block) {
+      var values = {}, lines = block.split('END:VEVENT')[0].split(/\r?\n/), d;
+      lines.forEach(function (line) { var i = line.indexOf(':'), key; if (i < 0) return; key = line.slice(0,i).split(';')[0]; values[key] = line.slice(i+1); });
+      function unescape(v) { return (v || '').replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\'); }
+      d = icsDate(values.DTSTART);
+      return d ? {time:d.getTime(),title:unescape(values.SUMMARY)||'Untitled event',location:unescape(values.LOCATION),when:d.toLocaleString()} : null;
+    }).filter(Boolean).sort(function (a,b) { return a.time-b.time; });
+  }
+  function loadCalendar() {
+    if (!session || calendarBusy) return;
+    var gen = generation; calendarBusy = true;
+    request('GET','./calendar.ics?v='+Date.now(),null,null,false,function (code,text) {
+      if (gen !== generation) return;
+      calendarBusy = false;
+      if (code === 200) {
+        try { calendar = parseCalendar(text); calendarGood = Date.now(); calendarFailed = false; }
+        catch (e) { calendarFailed = true; }
+      } else calendarFailed = true;
+      if (lastGood) rebuild(); status();
+    },true);
+  }
+  function dailyReload() {
+    var d = new Date(), day = dateKey(d);
+    // Defer while offline: do not destroy the last good in-memory display.
+    if (!session || !session.remember || storageWarning || d.getHours() < 3 || day === lastReloadDay || failure || Date.now()-lastGood > 30000) return;
+    try { localStorage.setItem(AUTH_KEY+'.reload',day); } catch (e) { return; }
+    lastReloadDay = day; window.location.reload();
+  }
+  try {
+    var saved = JSON.parse(stored(AUTH_KEY) || 'null');
+    if (saved && typeof saved.refreshToken === 'string' && typeof saved.uid === 'string') { session = saved; session.expires = 0; $('login').hidden = true; $('signout').hidden = false; $('inner').innerHTML = '<div class="panel">Restoring saved session… No data downloaded yet.</div>'; }
+  } catch (e) { remove(AUTH_KEY); }
+  lastReloadDay = stored(AUTH_KEY+'.reload') || dateKey(new Date());
+  setInterval(poll,15000);
+  setInterval(function () { if (Date.now()-calendarGood >= 5*60000) loadCalendar(); },15000);
+  setInterval(rotate,100);
+  setInterval(function () { status(); dailyReload(); },30000);
+  status(); if (session) { poll(); loadCalendar(); }
+}());
+</script>
+</body>
+</html>
