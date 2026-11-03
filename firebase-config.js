@@ -10,9 +10,12 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  getDoc,
+  getDocs,
   onSnapshot as firestoreOnSnapshot,
   query,
   orderBy,
+  where,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -148,7 +151,7 @@ export function watchApplicants(queryRef, onNext, onError) {
 }
 
 export {
-  collection, doc, addDoc, updateDoc, setDoc, query, orderBy, serverTimestamp,
+  collection, doc, addDoc, updateDoc, setDoc, getDoc, getDocs, query, orderBy, where, serverTimestamp,
   signInWithEmailAndPassword, onAuthStateChanged, signOut
 };
 
