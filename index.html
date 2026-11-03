@@ -113,7 +113,21 @@
   </nav>
   <button class="add-btn" id="addBtn">+ New applicant</button>
   <div class="sort-row"><label for="sortMode">Sort</label><select id="sortMode"><option value="precedence">Precedence</option><option value="updated">Recently updated</option><option value="name">Name A–Z</option></select></div>
+  <button class="btn btn-secondary btn-block" id="leadsNavBtn" type="button" style="margin-bottom:14px;">Survey leads</button>
   <div id="listContainer"><div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div></div>
+</div>
+
+<div id="leadsScreen" class="wrap hidden">
+  <button class="back-link" id="leadsBackBtn">‹ Back to applicants</button>
+  <header class="top"><h1>Survey leads</h1></header>
+  <div class="helper" id="leadsScopeNote" style="margin-bottom:10px;"></div>
+  <nav class="folder-nav" id="leadsQueueNav" aria-label="Lead queues" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+    <button type="button" class="folder-btn active" data-queue="review"><span class="folder-name">Needs review</span><span class="folder-count" id="reviewCount">0</span></button>
+    <button type="button" class="folder-btn" data-queue="imported"><span class="folder-name">New leads</span><span class="folder-count" id="importedCount">0</span></button>
+    <button type="button" class="folder-btn" data-queue="failed"><span class="folder-name">Failed</span><span class="folder-count" id="failedCount">0</span></button>
+    <button type="button" class="folder-btn" data-queue="done"><span class="folder-name">Completed</span><span class="folder-count" id="doneCount">0</span></button>
+  </nav>
+  <div id="leadsContainer"><div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div></div>
 </div>
 
 <div id="detailScreen" class="wrap hidden">
@@ -159,10 +173,10 @@
 </div>
 
 <script type="module">
-  import { db, auth, collection, doc, addDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp, signInWithEmailAndPassword, onAuthStateChanged, signOut, STAGES, STAGE_SHORT, canonicalStage, isArchived } from './firebase-config.js';
+  import { db, auth, collection, doc, addDoc, updateDoc, setDoc, getDoc, getDocs, onSnapshot, query, orderBy, where, serverTimestamp, signInWithEmailAndPassword, onAuthStateChanged, signOut, STAGES, STAGE_SHORT, canonicalStage, isArchived } from './firebase-config.js';
   import { escapeHtml, currentFiscalYear, timestampMillis, parseDateOnly, formatTime } from './pibase-util.js';
-  const loginScreen=document.getElementById('loginScreen'),listScreen=document.getElementById('listScreen'),detailScreen=document.getElementById('detailScreen'),sortMode=document.getElementById('sortMode');
-  function showScreen(name){loginScreen.classList.toggle('hidden',name!=='login');listScreen.classList.toggle('hidden',name!=='list');detailScreen.classList.toggle('hidden',name!=='detail');}
+  const loginScreen=document.getElementById('loginScreen'),listScreen=document.getElementById('listScreen'),detailScreen=document.getElementById('detailScreen'),leadsScreen=document.getElementById('leadsScreen'),sortMode=document.getElementById('sortMode');
+  function showScreen(name){loginScreen.classList.toggle('hidden',name!=='login');listScreen.classList.toggle('hidden',name!=='list');detailScreen.classList.toggle('hidden',name!=='detail');leadsScreen.classList.toggle('hidden',name!=='leads');}
   document.getElementById('loginBtn').addEventListener('click',async()=>{const email=document.getElementById('loginEmail').value.trim(),pass=document.getElementById('loginPass').value,errEl=document.getElementById('loginError');errEl.textContent='';try{await signInWithEmailAndPassword(auth,email,pass);}catch(e){errEl.textContent='Sign-in failed — check email and password.';}});
   document.getElementById('signOutBtn').addEventListener('click',()=>signOut(auth));
 
@@ -199,6 +213,107 @@
   document.getElementById('restoreApplicantBtn').addEventListener('click',restoreCurrentApplicant);
   document.getElementById('saveBtn').addEventListener('click',async()=>{const statusEl=document.getElementById('saveStatus');const payload={name:fieldEl('name').value.trim(),phone:fieldEl('phone').value.trim(),email:fieldEl('email').value.trim(),generalArea:fieldEl('generalArea').value,precedence:fieldEl('precedence').value||'normal',nextAction:fieldEl('nextAction').value.trim(),nextActionDate:fieldEl('nextActionDate').value||'',age:fieldEl('age').value?Number(fieldEl('age').value):null,priorService:fieldEl('priorService').value.trim(),physicalHealth:fieldEl('physicalHealth').value.trim(),legalIssues:fieldEl('legalIssues').value.trim(),educationLevel:fieldEl('educationLevel').value,maritalStatus:fieldEl('maritalStatus').value,dependents:fieldEl('dependents').value?Number(fieldEl('dependents').value):0,tattoosBrandsPiercings:fieldEl('tattoos').value.trim(),statusStage:currentStage,waiverType:currentStage==='Waiver'?fieldEl('waiverType').value:null,waiverStatus:currentStage==='Waiver'?fieldEl('waiverStatus').value:null,flagNeedsReview:false,updatedAt:serverTimestamp()};if(!payload.name){statusEl.style.color='#E08B77';statusEl.textContent='Name is required.';fieldEl('name').focus();return;}try{if(currentId)await updateDoc(doc(db,'applicants',currentId),payload);else{payload.createdAt=serverTimestamp();payload.archived=false;payload.archiveFolder=null;payload.archivedAt=null;payload.archivedFiscalYear=null;const ref=await addDoc(collection(db,'applicants'),payload);currentId=ref.id;renderArchiveActions({...payload,id:currentId});}statusEl.style.color='';statusEl.textContent='Saved.';setTimeout(()=>statusEl.textContent='',2000);}catch(e){statusEl.textContent='Save failed — check connection.';statusEl.style.color='#E08B77';console.error(e);}});
   document.getElementById('addNoteBtn').addEventListener('click',async()=>{const textEl=document.getElementById('newNoteText'),text=textEl.value.trim();if(!text)return;if(!currentId){document.getElementById('saveStatus').textContent='Save the applicant first, then add notes.';return;}try{await addDoc(collection(db,'applicants',currentId,'notes'),{text,createdAt:serverTimestamp()});await updateDoc(doc(db,'applicants',currentId),{latestNote:text,updatedAt:serverTimestamp()});textEl.value='';}catch(e){console.error(e);}});
+
+  // ---- Survey leads review (separate from the 30-day inactivity review) ----
+  let leads=[],currentQueue='review',unsubscribeLeads=null,leadsScoped=false;
+  function leadQueueOf(s){return s==='review'?'review':s==='imported'?'imported':s==='failed'?'failed':'done';}
+  function openLeads(){showScreen('leads');subscribeLeads();}
+  document.getElementById('leadsNavBtn').addEventListener('click',openLeads);
+  document.getElementById('leadsBackBtn').addEventListener('click',()=>showScreen('list'));
+  document.getElementById('leadsQueueNav').addEventListener('click',e=>{const button=e.target.closest('[data-queue]');if(!button)return;currentQueue=button.dataset.queue;renderLeads();});
+  function subscribeLeads(){
+    if(unsubscribeLeads)unsubscribeLeads();
+    leadsScoped=false;
+    document.getElementById('leadsScopeNote').textContent='';
+    attachLeadsQuery(query(collection(db,'surveyLeadImports')));
+  }
+  function attachLeadsQuery(q){
+    unsubscribeLeads=onSnapshot(q,snap=>{
+      leads=snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderLeads();
+    },async err=>{
+      console.error('Leads read failed',err);
+      if(err&&err.code==='permission-denied'&&!leadsScoped){
+        // Not an owner: discover this reviewer's recruiter slug and scope the query.
+        leadsScoped=true;
+        try{
+          const uid=auth.currentUser.uid;
+          const msnap=await getDocs(query(collection(db,'recruiterMappings'),where('uid','==',uid)));
+          if(msnap.empty){leadsDenied('No survey-lead access for this account.');return;}
+          const slug=msnap.docs[0].id;
+          document.getElementById('leadsScopeNote').textContent=`Showing leads for recruiter: ${slug}`;
+          attachLeadsQuery(query(collection(db,'surveyLeadImports'),where('recruiterSlug','==',slug)));
+        }catch(e2){console.error(e2);leadsDenied('Could not load survey leads.');}
+      }else leadsDenied('Could not load survey leads.');
+    });
+  }
+  function leadsDenied(msg){if(unsubscribeLeads)unsubscribeLeads();unsubscribeLeads=null;document.getElementById('leadsContainer').innerHTML=`<div class="eyebrow" style="text-align:center;padding:30px 0;">${escapeHtml(msg)}</div>`;}
+  async function fetchCandidate(aid){try{const s=await getDoc(doc(db,'applicants',aid));return s.exists()?{id:s.id,...s.data()}:null;}catch(e){console.error(e);return null;}}
+  async function renderLeads(){
+    const counts={review:0,imported:0,failed:0,done:0};
+    leads.forEach(l=>counts[leadQueueOf(l.status)]++);
+    document.getElementById('reviewCount').textContent=counts.review;
+    document.getElementById('importedCount').textContent=counts.imported;
+    document.getElementById('failedCount').textContent=counts.failed;
+    document.getElementById('doneCount').textContent=counts.done;
+    document.querySelectorAll('#leadsQueueNav [data-queue]').forEach(btn=>{const s=btn.dataset.queue===currentQueue;btn.classList.toggle('active',s);btn.setAttribute('aria-pressed',String(s));});
+    const container=document.getElementById('leadsContainer');
+    const docs=leads.filter(l=>leadQueueOf(l.status)===currentQueue);
+    if(!docs.length){container.innerHTML='<div class="eyebrow" style="text-align:center;padding:30px 0;">Nothing here.</div>';return;}
+    container.innerHTML='<div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div>';
+    const cards=await Promise.all(docs.map(renderLeadCard));
+    container.innerHTML=cards.join('');
+    container.querySelectorAll('[data-lead-action]').forEach(btn=>btn.addEventListener('click',()=>leadAction(btn.dataset.leadId,btn.dataset.leadAction,btn.dataset.candidate||null)));
+  }
+  async function renderLeadCard(l){
+    const s=l.surveySnapshot||{};
+    const head=`<div class="list-card"><div class="row1"><div class="name">${escapeHtml(s.name||'Unnamed')}</div><div class="right-tags"><div class="stage-tag">${escapeHtml(l.status||'')}</div></div></div><div class="sub">${[s.email||null,s.phone||null,s.school||null,l.recruiterSlug||null].filter(Boolean).map(escapeHtml).join(' · ')}</div>`;
+    if(l.status==='review'){
+      const cands=await Promise.all((l.duplicateCandidates||[]).map(async c=>({meta:c,applicant:await fetchCandidate(c.applicantId)})));
+      const candHtml=cands.map(({meta,applicant})=>`<div class="note-item"><div class="note-time">Matched on ${(meta.matchedOn||[]).join(' + ')||'contact'}${meta.archived?' · archived':''}</div><div class="note-text">${escapeHtml(applicant?applicant.name||'Unnamed':'Applicant not found')}</div><div class="sub">${escapeHtml([applicant&&applicant.email||null,applicant&&applicant.phone||null].filter(Boolean).join(' · '))}</div><button class="btn btn-secondary" style="margin-top:6px;" data-lead-action="link" data-lead-id="${escapeHtml(l.id)}" data-candidate="${escapeHtml(meta.applicantId||'')}">Link to this applicant</button></div>`).join('')||'<div class="helper">No matching applicant on file yet. Another submission may still be importing.</div>';
+      return `${head}<div class="section-title">Possible duplicates — nothing was changed</div>${candHtml}<div class="archive-actions" style="margin-top:10px;"><button class="btn btn-secondary" data-lead-action="separate" data-lead-id="${escapeHtml(l.id)}">Create separate applicant</button><button class="btn btn-secondary" data-lead-action="dismiss" data-lead-id="${escapeHtml(l.id)}">Dismiss submission</button></div>${renderDecisions(l)}</div>`;
+    }
+    if(l.status==='failed')return `${head}<div class="helper">Import failed: ${escapeHtml(l.lastError||'unknown error')}</div><div class="helper">Reset the lead in the survey admin, then run the manual sync again to retry.</div>${renderDecisions(l)}</div>`;
+    if(l.status==='imported')return `${head}<div class="helper">Imported as a New Lead${l.applicantId?` · applicant ${escapeHtml(l.applicantId)}`:''}.</div>${renderDecisions(l)}</div>`;
+    return `${head}${renderDecisions(l)}</div>`;
+  }
+  function renderDecisions(l){
+    const ds=l.decisions||[];
+    if(!ds.length)return'';
+    return `<div class="section-title">Review history</div>`+ds.map(d=>`<div class="note-item"><div class="note-time">${escapeHtml(d.action||'')} · ${formatTime(l.updatedAt)}</div><div class="note-text">${escapeHtml(d.note||'')}</div></div>`).join('');
+  }
+  async function leadAction(responseId,action,candidateId){
+    const lead=leads.find(l=>l.id===responseId);
+    if(!lead||lead.status!=='review')return;
+    const uid=auth.currentUser.uid;
+    const note=window.prompt('Review note (optional):','')||'';
+    const decision={by:uid,action:action==='separate'?'created-separate':action,note:note.slice(0,280)};
+    try{
+      if(action==='link'){
+        if(!candidateId)return;
+        if(!window.confirm('Link this submission to the existing applicant? No applicant data will be changed.'))return;
+        await updateDoc(doc(db,'surveyLeadImports',responseId),{status:'linked',applicantId:candidateId,decisions:[...(lead.decisions||[]),decision],updatedBy:uid,updatedAt:serverTimestamp()});
+      }else if(action==='dismiss'){
+        if(!window.confirm('Dismiss this submission? It will not be imported.'))return;
+        await updateDoc(doc(db,'surveyLeadImports',responseId),{status:'dismissed',decisions:[...(lead.decisions||[]),decision],updatedBy:uid,updatedAt:serverTimestamp()});
+      }else if(action==='separate'){
+        if(!window.confirm('Create a separate applicant from this submission?'))return;
+        const s=lead.surveySnapshot||{};
+        const separateId=`survey-${responseId}-separate`;
+        await setDoc(doc(db,'applicants',separateId),{
+          name:s.name||'Unnamed',phone:s.phone||'',email:s.email||'',
+          statusStage:'New Lead',precedence:'normal',dependents:0,age:null,
+          generalArea:'',nextAction:'',nextActionDate:'',priorService:'',
+          physicalHealth:'',legalIssues:'',educationLevel:'',maritalStatus:'',
+          tattoosBrandsPiercings:'',waiverType:null,waiverStatus:null,
+          flagNeedsReview:false,archived:false,archiveFolder:null,
+          archivedAt:null,archivedFiscalYear:null,
+          source:'SURVEY',surveyResponseId:responseId,recruiterSlug:lead.recruiterSlug||'',
+          school:s.school||'',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),updatedBy:uid});
+        await updateDoc(doc(db,'surveyLeadImports',responseId),{status:'imported',applicantId:separateId,decisions:[...(lead.decisions||[]),decision],updatedBy:uid,updatedAt:serverTimestamp()});
+      }
+    }catch(e){console.error(e);window.alert('Review action failed — check connection and permissions.');}
+  }
 </script>
 <script type="module" src="./pwa-runtime.js"></script>
 </body>

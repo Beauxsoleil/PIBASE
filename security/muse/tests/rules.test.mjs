@@ -19,6 +19,8 @@ beforeEach(async () => {
       owner: { role: 'owner', enabled: true },
       muse: { role: 'assistant', enabled: true, read: true, write: true },
       readonly: { role: 'assistant', enabled: true, read: true, write: false },
+      sync: { role: 'sync', enabled: true, read: true, write: true },
+      reviewer1: { role: 'reviewer', enabled: true, read: true },
       kiosk: { role: 'kiosk', enabled: true },
       disabled: { role: 'assistant', enabled: false, read: true, write: true }
     })) await setDoc(doc(db, 'access', uid), data);
@@ -187,4 +189,182 @@ test('root deploy mirror cannot accidentally restore the legacy signed-in policy
   const canonical=await readFile(new URL('../firestore.rules',import.meta.url),'utf8');
   const root=await readFile(new URL('../../../firestore.rules',import.meta.url),'utf8');
   const { strictEqual }=await import('node:assert');strictEqual(root,canonical);
+});
+
+// ---- SURVEY lead integration rules (synthetic records only) ----
+
+const RESPONSE_ID = '123e4567-e89b-42d3-a456-426614174000';
+const DEDUPE_KEY = 'e:' + 'a'.repeat(64);
+
+function importRecord(uid, overrides = {}) {
+  return {
+    responseId: RESPONSE_ID,
+    recruiterSlug: 'joel-viola',
+    status: 'review',
+    applicantId: null,
+    normalizedEmail: 'student@example.com',
+    normalizedPhone: '+12085550147',
+    surveySnapshot: {name: 'Synthetic Student'},
+    duplicateCandidates: [],
+    decisions: [],
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    updatedBy: uid,
+    updatedAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+async function seedMapping(slug = 'joel-viola', uid = 'reviewer1') {
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), `recruiterMappings/${slug}`),
+      {uid, active: true, updatedAt: serverTimestamp()});
+  });
+}
+
+async function seedImport(record) {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const ref = doc(ctx.firestore(), 'surveyLeadImports', record.responseId);
+    const {createdAt, updatedAt, ...rest} = record;
+    await setDoc(ref, {...rest, createdAt: new Date(), updatedAt: new Date()});
+  });
+}
+
+test('integration worker can create import records and dedupe locks; forgeries fail', async () => {
+  const client = db('sync');
+  const ref = doc(client, 'surveyLeadImports', RESPONSE_ID);
+  await assertSucceeds(setDoc(ref, importRecord('sync')));
+  await assertFails(setDoc(doc(client, 'surveyLeadImports', 'other-id'), importRecord('sync')));
+  await assertFails(setDoc(ref, importRecord('owner')));
+  await assertFails(setDoc(ref, {...importRecord('sync'), createdAt: new Date('2020-01-01')}));
+  await assertFails(setDoc(ref, {...importRecord('sync'), status: 'bogus'}));
+  await assertFails(setDoc(ref, {...importRecord('sync'), extra: 'nope'}));
+  await assertFails(setDoc(ref, {...importRecord('sync'), responseId: 'mismatch'}));
+  const lock = doc(client, 'surveyLeadDedupes', DEDUPE_KEY);
+  const lockData = {responseId: RESPONSE_ID, applicantId: null, createdBy: 'sync', createdAt: serverTimestamp()};
+  await assertSucceeds(setDoc(lock, lockData));
+  await assertFails(setDoc(doc(client, 'surveyLeadDedupes', 'bad-key'), lockData));
+  await assertFails(setDoc(lock, {...lockData, createdBy: 'owner'}));
+  await assertFails(setDoc(lock, {...lockData, createdAt: new Date('2020-01-01')}));
+  await assertSucceeds(updateDoc(lock, {applicantId: 'survey-x', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(lock, {responseId: 'changed', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(lock, {applicantId: 'y', updatedBy: 'owner', updatedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(lock));
+});
+
+test('recruiter mappings are console-only; reads are isolated', async () => {
+  await seedMapping('joel-viola', 'reviewer1');
+  await seedMapping('jane-smith', 'someone-else');
+  await assertSucceeds(getDoc(doc(db('owner'), 'recruiterMappings/joel-viola')));
+  for (const uid of ['owner', 'sync', 'reviewer1']) {
+    await assertFails(setDoc(doc(db(uid), 'recruiterMappings/joel-viola'), {uid: 'x'}));
+  }
+  await assertSucceeds(getDoc(doc(db('reviewer1'), 'recruiterMappings/joel-viola')));
+  await assertFails(getDoc(doc(db('reviewer1'), 'recruiterMappings/jane-smith')));
+  await assertFails(getDoc(doc(db('kiosk', 'anonymous'), 'recruiterMappings/joel-viola')));
+  await assertFails(getDoc(doc(db('unknown'), 'recruiterMappings/joel-viola')));
+});
+
+test('import reads are recruiter-isolated; kiosk and strangers see nothing', async () => {
+  await seedMapping('joel-viola', 'reviewer1');
+  await seedImport(importRecord('sync'));
+  await seedImport(importRecord('sync', {responseId: '223e4567-e89b-42d3-a456-426614174001', recruiterSlug: 'jane-smith'}));
+  await assertSucceeds(getDoc(doc(db('owner'), `surveyLeadImports/${RESPONSE_ID}`)));
+  await assertSucceeds(getDoc(doc(db('sync'), `surveyLeadImports/${RESPONSE_ID}`)));
+  await assertSucceeds(getDoc(doc(db('reviewer1'), `surveyLeadImports/${RESPONSE_ID}`)));
+  await assertFails(getDoc(doc(db('reviewer1'), 'surveyLeadImports/223e4567-e89b-42d3-a456-426614174001')));
+  await assertFails(getDoc(doc(db('kiosk', 'anonymous'), `surveyLeadImports/${RESPONSE_ID}`)));
+  await assertFails(getDoc(doc(db('unknown'), `surveyLeadImports/${RESPONSE_ID}`)));
+});
+
+test('review transitions are validated and audit entries are server-enforced', async () => {
+  await seedMapping('joel-viola', 'reviewer1');
+  await seedImport(importRecord('sync'));
+  const ref = doc(db('owner'), 'surveyLeadImports', RESPONSE_ID);
+  const decide = (uid, action) => ({
+    status: action === 'dismissed' ? 'dismissed' : action === 'linked' ? 'linked' : 'imported',
+    applicantId: action === 'linked' ? 'applicants/a' : null,
+    decisions: [{by: uid, action, note: 'Synthetic review'}],
+    updatedBy: uid,
+    updatedAt: serverTimestamp(),
+  });
+  await assertSucceeds(updateDoc(ref, decide('owner', 'linked')));
+  await seedImport(importRecord('sync', {responseId: '323e4567-e89b-42d3-a456-426614174002'}));
+  const ref2 = doc(db('owner'), 'surveyLeadImports', '323e4567-e89b-42d3-a456-426614174002');
+  await assertFails(updateDoc(ref2, {status: 'linked', updatedBy: 'owner', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(ref2, {...decide('owner', 'linked'), decisions: [{by: 'reviewer1', action: 'linked', note: ''}]}));
+  await assertFails(updateDoc(ref2, {...decide('owner', 'linked'), decisions: [{by: 'owner', at: new Date('2020-01-01'), action: 'linked', note: ''}]}));
+  await assertFails(updateDoc(ref2, {...decide('owner', 'dismissed'), recruiterSlug: 'jane-smith'}));
+  await seedImport(importRecord('sync', {responseId: '423e4567-e89b-42d3-a456-426614174003', status: 'imported'}));
+  const ref3 = doc(db('owner'), 'surveyLeadImports', '423e4567-e89b-42d3-a456-426614174003');
+  await assertFails(updateDoc(ref3, decide('owner', 'dismissed')));
+  await assertFails(deleteDoc(ref3));
+});
+
+test('mapped reviewer can resolve only their own slug; applicant writes stay fenced', async () => {
+  await seedMapping('joel-viola', 'reviewer1');
+  await seedImport(importRecord('sync'));
+  await seedImport(importRecord('sync', {responseId: '523e4567-e89b-42d3-a456-426614174004', recruiterSlug: 'jane-smith'}));
+  const own = doc(db('reviewer1'), 'surveyLeadImports', RESPONSE_ID);
+  const decide = {
+    status: 'dismissed',
+    decisions: [{by: 'reviewer1', action: 'dismissed', note: 'Synthetic'}],
+    updatedBy: 'reviewer1',
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(updateDoc(own, decide));
+  const other = doc(db('reviewer1'), 'surveyLeadImports', '523e4567-e89b-42d3-a456-426614174004');
+  await assertFails(updateDoc(other, decide));
+  await assertSucceeds(getDoc(doc(db('reviewer1'), 'applicants/a')));
+  await assertFails(setDoc(doc(db('reviewer1'), 'applicants/new'), {name: 'Synthetic', updatedBy: 'reviewer1', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(doc(db('reviewer1'), 'applicants/a'), {name: 'Changed', updatedBy: 'reviewer1', updatedAt: serverTimestamp()}));
+  const separateId = `survey-${RESPONSE_ID}-separate`;
+  const separate = {
+    name: 'Synthetic Separate', statusStage: 'New Lead', source: 'SURVEY',
+    surveyResponseId: RESPONSE_ID, updatedBy: 'reviewer1', updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(doc(db('reviewer1'), `applicants/${separateId}`), separate));
+  await assertFails(setDoc(doc(db('reviewer1'), 'applicants/other-id'), separate));
+  await assertFails(setDoc(doc(db('reviewer1'), `applicants/${separateId}`), {...separate, source: 'MANUAL'}));
+});
+
+test('integration worker cannot resolve reviews or touch mappings', async () => {
+  await seedMapping('joel-viola', 'reviewer1');
+  await seedImport(importRecord('sync'));
+  const ref = doc(db('sync'), 'surveyLeadImports', RESPONSE_ID);
+  await assertFails(updateDoc(ref, {
+    status: 'dismissed',
+    decisions: [{by: 'sync', action: 'dismissed', note: ''}],
+    updatedBy: 'sync', updatedAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(db('sync'), 'recruiterMappings/joel-viola'), {uid: 'sync'}));
+});
+
+test('sync role is least-privilege: fenced applicant creates, no updates/deletes, nothing else', async () => {
+  const client = db('sync');
+  const detId = `survey-${RESPONSE_ID}`;
+  const payload = {
+    name: 'Synthetic Sync', source: 'SURVEY', statusStage: 'New Lead',
+    updatedBy: 'sync', updatedAt: serverTimestamp(),
+  };
+  // Deterministic survey-{uuid} create succeeds.
+  await assertSucceeds(setDoc(doc(client, `applicants/${detId}`), payload));
+  // Any other applicant ID is rejected.
+  await assertFails(setDoc(doc(client, 'applicants/other'), payload));
+  await assertFails(setDoc(doc(client, `applicants/${detId}-x`), payload));
+  // Missing source stamp or wrong stage is rejected.
+  await assertFails(setDoc(doc(client, `applicants/survey-223e4567-e89b-42d3-a456-426614174000`), {...payload, source: 'MANUAL'}));
+  await assertFails(setDoc(doc(client, `applicants/survey-323e4567-e89b-42d3-a456-426614174000`), {...payload, statusStage: 'Packet Prep'}));
+  // No updates or deletes on any applicant, even ones it created.
+  await assertFails(updateDoc(doc(client, `applicants/${detId}`), {name: 'Changed', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(doc(client, 'applicants/a'), {name: 'Changed', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(doc(client, `applicants/${detId}`)));
+  // No notes.
+  await assertFails(setDoc(doc(client, `applicants/${detId}/notes/n1`), {text: 'x', updatedBy: 'sync', updatedAt: serverTimestamp(), createdAt: serverTimestamp()}));
+  // Reads allowed for duplicate detection; nothing else readable.
+  await assertSucceeds(getDocs(collection(client, 'applicants')));
+  await assertFails(getDoc(doc(client, 'settings/mission')));
+  await assertFails(getDoc(doc(client, 'events/e1')));
+  // No warrior access.
+  await assertFails(getDoc(doc(client, 'warriorChallenges/practice')));
 });
