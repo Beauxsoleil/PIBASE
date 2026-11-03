@@ -143,16 +143,20 @@ service cloud.firestore {
     function validImportTransition(from, to) {
       return from == 'review' && to in ['linked', 'dismissed', 'imported'];
     }
-    // Audit integrity: decisions grow by exactly one appended entry; every
-    // entry's author and timestamp are server-enforced, never client-trusted.
+    // Audit integrity: decisions grow by exactly one appended entry; the
+    // author's identity is server-enforced (by == auth.uid) and the decision
+    // time is the document-level updatedAt == request.time (already enforced
+    // for every update). No per-entry timestamp: the Firestore client SDK
+    // does not allow serverTimestamp() inside arrays, and transitions are
+    // terminal (review -> linked/dismissed/imported), so at most one decision
+    // ever exists and updatedAt is unambiguously its time.
     function validDecisionAppend(oldDecisions, newDecisions) {
       return newDecisions is list && oldDecisions is list
         && newDecisions.size() == oldDecisions.size() + 1
         && newDecisions.hasAll(oldDecisions)
         && newDecisions[newDecisions.size() - 1].keys()
-          .hasOnly(['by', 'at', 'action', 'note'])
+          .hasOnly(['by', 'action', 'note'])
         && newDecisions[newDecisions.size() - 1].get('by', '') == request.auth.uid
-        && newDecisions[newDecisions.size() - 1].get('at', null) == request.time
         && newDecisions[newDecisions.size() - 1].get('action', '')
           in ['linked', 'dismissed', 'created-separate'];
     }

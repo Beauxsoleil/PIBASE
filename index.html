@@ -280,14 +280,14 @@
   function renderDecisions(l){
     const ds=l.decisions||[];
     if(!ds.length)return'';
-    return `<div class="section-title">Review history</div>`+ds.map(d=>`<div class="note-item"><div class="note-time">${escapeHtml(d.action||'')} · ${formatTime(d.at)}</div><div class="note-text">${escapeHtml(d.note||'')}</div></div>`).join('');
+    return `<div class="section-title">Review history</div>`+ds.map(d=>`<div class="note-item"><div class="note-time">${escapeHtml(d.action||'')} · ${formatTime(l.updatedAt)}</div><div class="note-text">${escapeHtml(d.note||'')}</div></div>`).join('');
   }
   async function leadAction(responseId,action,candidateId){
     const lead=leads.find(l=>l.id===responseId);
     if(!lead||lead.status!=='review')return;
     const uid=auth.currentUser.uid;
     const note=window.prompt('Review note (optional):','')||'';
-    const decision={by:uid,at:serverTimestamp(),action:action==='separate'?'created-separate':action,note:note.slice(0,280)};
+    const decision={by:uid,action:action==='separate'?'created-separate':action,note:note.slice(0,280)};
     try{
       if(action==='link'){
         if(!candidateId)return;

@@ -284,7 +284,7 @@ test('review transitions are validated and audit entries are server-enforced', a
   const decide = (uid, action) => ({
     status: action === 'dismissed' ? 'dismissed' : action === 'linked' ? 'linked' : 'imported',
     applicantId: action === 'linked' ? 'applicants/a' : null,
-    decisions: [{by: uid, at: serverTimestamp(), action, note: 'Synthetic review'}],
+    decisions: [{by: uid, action, note: 'Synthetic review'}],
     updatedBy: uid,
     updatedAt: serverTimestamp(),
   });
@@ -292,7 +292,7 @@ test('review transitions are validated and audit entries are server-enforced', a
   await seedImport(importRecord('sync', {responseId: '323e4567-e89b-42d3-a456-426614174002'}));
   const ref2 = doc(db('owner'), 'surveyLeadImports', '323e4567-e89b-42d3-a456-426614174002');
   await assertFails(updateDoc(ref2, {status: 'linked', updatedBy: 'owner', updatedAt: serverTimestamp()}));
-  await assertFails(updateDoc(ref2, {...decide('owner', 'linked'), decisions: [{by: 'reviewer1', at: serverTimestamp(), action: 'linked', note: ''}]}));
+  await assertFails(updateDoc(ref2, {...decide('owner', 'linked'), decisions: [{by: 'reviewer1', action: 'linked', note: ''}]}));
   await assertFails(updateDoc(ref2, {...decide('owner', 'linked'), decisions: [{by: 'owner', at: new Date('2020-01-01'), action: 'linked', note: ''}]}));
   await assertFails(updateDoc(ref2, {...decide('owner', 'dismissed'), recruiterSlug: 'jane-smith'}));
   await seedImport(importRecord('sync', {responseId: '423e4567-e89b-42d3-a456-426614174003', status: 'imported'}));
@@ -308,7 +308,7 @@ test('mapped reviewer can resolve only their own slug; applicant writes stay fen
   const own = doc(db('reviewer1'), 'surveyLeadImports', RESPONSE_ID);
   const decide = {
     status: 'dismissed',
-    decisions: [{by: 'reviewer1', at: serverTimestamp(), action: 'dismissed', note: 'Synthetic'}],
+    decisions: [{by: 'reviewer1', action: 'dismissed', note: 'Synthetic'}],
     updatedBy: 'reviewer1',
     updatedAt: serverTimestamp(),
   };
@@ -334,7 +334,7 @@ test('integration worker cannot resolve reviews or touch mappings', async () => 
   const ref = doc(db('sync'), 'surveyLeadImports', RESPONSE_ID);
   await assertFails(updateDoc(ref, {
     status: 'dismissed',
-    decisions: [{by: 'sync', at: serverTimestamp(), action: 'dismissed', note: ''}],
+    decisions: [{by: 'sync', action: 'dismissed', note: ''}],
     updatedBy: 'sync', updatedAt: serverTimestamp(),
   }));
   await assertFails(setDoc(doc(db('sync'), 'recruiterMappings/joel-viola'), {uid: 'sync'}));
