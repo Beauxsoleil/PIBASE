@@ -19,7 +19,7 @@ beforeEach(async () => {
       owner: { role: 'owner', enabled: true },
       muse: { role: 'assistant', enabled: true, read: true, write: true },
       readonly: { role: 'assistant', enabled: true, read: true, write: false },
-      sync: { role: 'assistant', enabled: true, read: true, write: true },
+      sync: { role: 'sync', enabled: true, read: true, write: true },
       reviewer1: { role: 'reviewer', enabled: true, read: true },
       kiosk: { role: 'kiosk', enabled: true },
       disabled: { role: 'assistant', enabled: false, read: true, write: true }
@@ -338,4 +338,33 @@ test('integration worker cannot resolve reviews or touch mappings', async () => 
     updatedBy: 'sync', updatedAt: serverTimestamp(),
   }));
   await assertFails(setDoc(doc(db('sync'), 'recruiterMappings/joel-viola'), {uid: 'sync'}));
+});
+
+test('sync role is least-privilege: fenced applicant creates, no updates/deletes, nothing else', async () => {
+  const client = db('sync');
+  const detId = `survey-${RESPONSE_ID}`;
+  const payload = {
+    name: 'Synthetic Sync', source: 'SURVEY', statusStage: 'New Lead',
+    updatedBy: 'sync', updatedAt: serverTimestamp(),
+  };
+  // Deterministic survey-{uuid} create succeeds.
+  await assertSucceeds(setDoc(doc(client, `applicants/${detId}`), payload));
+  // Any other applicant ID is rejected.
+  await assertFails(setDoc(doc(client, 'applicants/other'), payload));
+  await assertFails(setDoc(doc(client, `applicants/${detId}-x`), payload));
+  // Missing source stamp or wrong stage is rejected.
+  await assertFails(setDoc(doc(client, `applicants/survey-223e4567-e89b-42d3-a456-426614174000`), {...payload, source: 'MANUAL'}));
+  await assertFails(setDoc(doc(client, `applicants/survey-323e4567-e89b-42d3-a456-426614174000`), {...payload, statusStage: 'Packet Prep'}));
+  // No updates or deletes on any applicant, even ones it created.
+  await assertFails(updateDoc(doc(client, `applicants/${detId}`), {name: 'Changed', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(updateDoc(doc(client, 'applicants/a'), {name: 'Changed', updatedBy: 'sync', updatedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(doc(client, `applicants/${detId}`)));
+  // No notes.
+  await assertFails(setDoc(doc(client, `applicants/${detId}/notes/n1`), {text: 'x', updatedBy: 'sync', updatedAt: serverTimestamp(), createdAt: serverTimestamp()}));
+  // Reads allowed for duplicate detection; nothing else readable.
+  await assertSucceeds(getDocs(collection(client, 'applicants')));
+  await assertFails(getDoc(doc(client, 'settings/mission')));
+  await assertFails(getDoc(doc(client, 'events/e1')));
+  // No warrior access.
+  await assertFails(getDoc(doc(client, 'warriorChallenges/practice')));
 });
