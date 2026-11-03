@@ -153,6 +153,7 @@ export {
 };
 
 export const STAGES = [
+  "New Lead",
   "Initial Appointment",
   "Packet Prep",
   "Processing Authorized",
@@ -163,6 +164,7 @@ export const STAGES = [
 ];
 
 export const STAGE_SHORT = {
+  "New Lead": "NEW LEAD",
   "Initial Appointment": "INITIAL",
   "Packet Prep": "PACKET",
   "Processing Authorized": "AUTH'D",
