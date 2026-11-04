@@ -37,6 +37,8 @@
   var lastDataReaction = 0;
   var lastWorkReaction = 0;
   var latestDueCount = -1;
+  var latestRecords = null;
+  var lastDueDay = '';
   var poses = {
     idle: [0, 0, 0, 0, 1, 0],
     wave: [2, 0, 2, 0, 2, 0],
@@ -132,35 +134,46 @@
         }
       }
       lastEnlistedIds = ids;
-      // Display only an aggregate follow-up count; never expose applicant names
-      // in the kiosk mascot. Due dates are parsed as local calendar dates.
-      var now = new Date();
-      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      var due = 0;
-      for (var j = 0; j < records.length; j++) {
-        var item = records[j];
-        if (!item || !item.nextAction || !/^\d{4}-\d{2}-\d{2}$/.test(item.nextActionDate || '')) continue;
-        var parts = item.nextActionDate.split('-');
-        var deadline = new Date(+parts[0], +parts[1] - 1, +parts[2]).getTime();
-        if (deadline <= today) due++;
-      }
-      var badge = document.getElementById('boudreauxStatus');
-      if (badge) {
-        badge.hidden = due === 0;
-        if (due > 0) badge.textContent = due + (due === 1 ? ' follow-up due' : ' follow-ups due');
-      }
-      if (due > latestDueCount && latestDueCount >= 0 &&
-          Date.now() - lastWorkReaction > 60000 && !hidden) {
-        lastWorkReaction = Date.now();
-        play('working', 2500);
-      }
-      latestDueCount = due;
+      latestRecords = records;
+      updateDueStatus(true);
     });
     window.addEventListener('offline', function () { play('think', 4000); });
     window.addEventListener('online', function () { play('wave', 2500); });
     // Keep a low fixed animation cadence for the Raspberry Pi 2 CPU/GPU.
     window.setInterval(tick, 650);
     window.Boudreaux = { play: play, hide: function () { setHidden(true); }, show: function () { setHidden(false); } }; // Optional read-only demo or future integrations.
+  }
+
+  function updateDueStatus(react) {
+    if (!latestRecords) return;
+    // Recalculate after midnight even if Firestore has not emitted a new snapshot.
+    var now = new Date();
+    var day = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+    if (!react && day === lastDueDay) return;
+    lastDueDay = day;
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    var due = 0;
+    for (var j = 0; j < latestRecords.length; j++) {
+      var item = latestRecords[j];
+      if (!item || !item.nextAction || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.nextActionDate || '')) continue;
+      var parts = item.nextActionDate.split('-');
+      var deadline = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      // Reject rolled-over invalid dates, e.g. February 30.
+      if (deadline.getFullYear() !== +parts[0] || deadline.getMonth() !== +parts[1] - 1 ||
+          deadline.getDate() !== +parts[2]) continue;
+      if (deadline.getTime() <= today) due++;
+    }
+    var badge = document.getElementById('boudreauxStatus');
+    if (badge) {
+      badge.hidden = due === 0;
+      badge.textContent = due ? due + (due === 1 ? ' follow-up due' : ' follow-ups due') : '';
+    }
+    if (react && due > latestDueCount && latestDueCount >= 0 &&
+        Date.now() - lastWorkReaction > 60000 && !hidden) {
+      lastWorkReaction = Date.now();
+      play('working', 2500);
+    }
+    latestDueCount = due;
   }
 
   function setFrame(index) {
@@ -183,6 +196,7 @@
   function tick() {
     var host = document.getElementById('boudreauxCompanion');
     if (!host || host.hidden || document.hidden) return;
+    updateDueStatus(false);
     // Hide when applicant detail is open, so the mascot never covers records.
     var detail = document.getElementById('detailView');
     host.style.visibility = detail && detail.classList.contains('open') ? 'hidden' : 'visible';
