@@ -134,6 +134,15 @@
         confirmed: Math.max(0, Number(data.confirmed) || 0) };
       updateRivalry();
     });
+    // Keyboard fallback for kiosk installations with a keyboard but no mouse.
+    document.addEventListener('keydown', function (event) {
+      if (event.altKey && (event.key === 't' || event.key === 'T')) {
+        event.preventDefault();
+        setVisible(hidden);
+      }
+    });
+    window.addEventListener('resize', updateRivalry);
+    updateRivalry();
     window.addEventListener('pibase:screen-change', function () { play('point', 1800); });
     window.addEventListener('offline', function () { play('think', 2400); });
     window.addEventListener('online', function () { play('hat', 1800); });
