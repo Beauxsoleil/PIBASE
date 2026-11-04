@@ -10,12 +10,13 @@
 <title>PIBASE — iPad Display</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1210;color:#e9e6dc;font-family:Arial,sans-serif}header{height:90px;margin:0 22px;border-bottom:1px solid #3d4c41;padding:16px 0}h1{font-size:30px;margin:0;color:#c6a15b;letter-spacing:3px}h2{font-size:24px;margin:0 0 12px}h3{margin:0 0 10px;font-size:22px}p{margin:8px 0;line-height:1.4}.right{float:right;text-align:right}.muted{color:#9aaa9f;font-size:15px}.badge{color:#f1bd54;font-size:14px;margin-left:10px}.warning{color:#f1bd54}#content{position:absolute;top:106px;bottom:62px;left:22px;right:22px;overflow:hidden}#viewport{height:100%;overflow:hidden}#inner{padding-bottom:8px}.card{float:left;width:48%;margin:0 2% 14px 0;padding:18px;border:1px solid #3d4c41;border-radius:6px;background:#1a231d}.card.flagged{border-color:#c6a15b}.name{font-size:23px;font-weight:bold;word-wrap:break-word}.meta{color:#9aaa9f;margin:10px 0;font-size:15px}.rail{display:-webkit-flex;display:flex;margin:18px 0}.node{-webkit-flex:1;flex:1;text-align:center;border-top:3px solid #3d4c41;padding-top:9px;font-size:10px;color:#9aaa9f}.node.done{border-color:#4fa88a;color:#4fa88a}.node.current{border-color:#c6a15b;color:#f1bd54;font-weight:bold}.note{border-top:1px solid #3d4c41;padding-top:10px;white-space:pre-wrap;word-wrap:break-word;font-size:17px;line-height:1.45}.label{display:block;font-size:11px;color:#9aaa9f;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}.panel{padding:20px;background:#1a231d;border:1px solid #3d4c41;border-radius:6px;margin-bottom:14px}.row{padding:14px 0;border-bottom:1px solid #3d4c41;word-wrap:break-word}.big{font-size:54px;color:#c6a15b}.bar{height:10px;background:#3d4c41;margin-top:8px}.fill{height:10px;background:#4fa88a}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px 9px;border-bottom:1px solid #3d4c41}footer{position:absolute;bottom:0;left:0;right:0;height:52px;padding:8px 22px;border-top:1px solid #3d4c41;background:#141b17;font-size:12px}button,input{font:inherit}button{background:#26352b;color:#e9e6dc;border:1px solid #6d806f;padding:12px;min-height:44px;border-radius:4px}#signout{float:right;min-height:34px;padding:5px 12px}#login{position:absolute;z-index:3;top:100px;left:15%;width:70%;padding:24px;background:#1a231d;border:1px solid #c6a15b;border-radius:6px}#login input[type=email],#login input[type=password]{display:block;width:100%;margin:6px 0 14px;padding:12px;background:#0d1210;color:#fff;border:1px solid #6d806f}#login label{display:block;margin:10px 0}#loginMessage{min-height:24px;color:#f1bd54}#debug{color:#f1bd54}.clear{clear:both}#reminder{color:#f1bd54;font-size:13px;margin-top:5px}#login[hidden],button[hidden]{display:none}
+.roster{width:100%;table-layout:fixed;font-size:15px}.roster th,.roster td{padding:9px 8px;vertical-align:top;word-wrap:break-word}.roster th:nth-child(1){width:24%}.roster th:nth-child(2){width:19%}.roster th:nth-child(3){width:17%}.roster th:nth-child(4){width:40%}.roster .review{color:#f1bd54;font-weight:bold}.roster .next{color:#9aaa9f;font-size:13px;margin-top:3px}.roster tr:nth-child(even){background:#172019}
 </style>
 </head>
 <body>
 <header><div class="right"><div id="clock"></div><div class="muted" id="section">Read-only display</div><div id="reminder"></div></div><h1>PIBASE</h1><div class="muted">Recruiting command board · Legacy iPad</div></header>
 <div id="content"><div id="viewport"><div id="inner"><div class="panel">Sign in with your existing PIBASE account to load the display.</div></div></div></div>
-<form id="login"><h2>Display sign-in</h2><p>This page only reads data. Your account keeps its existing permissions.</p><label>Email<input id="email" type="email" autocapitalize="none" autocorrect="off" required></label><label>Password<input id="password" type="password" required></label><label><input id="remember" type="checkbox" checked> Keep me signed in on this controlled iPad</label><button id="signin" type="submit">Sign in</button><div id="loginMessage" role="status"></div><p class="muted">Launch from the Home Screen before signing in. No password is saved by this page.</p><p class="muted">15-second polling shares PIBASE’s read quota. Check usage before leaving this running all day.</p></form>
+<form id="login"><h2>Display sign-in</h2><p>This page only reads data. Your account keeps its existing permissions.</p><label>Email<input id="email" type="email" autocapitalize="none" autocorrect="off" required></label><label>Password<input id="password" type="password" required></label><label><input id="remember" type="checkbox" checked> Keep me signed in on this controlled iPad</label><button id="signin" type="submit">Sign in</button><div id="loginMessage" role="status"></div><p class="muted">Launch from the Home Screen before signing in. No password is saved by this page.</p><p class="muted">5-minute polling reduces PIBASE’s read quota usage. Check usage before leaving this running all day.</p></form>
 <footer><button id="signout" hidden>Sign out</button><div id="status" role="status">Waiting for sign-in · No data downloaded yet</div><div id="debug">If this message stays after sign-in, JavaScript has not started.</div></footer>
 <noscript>JavaScript must be enabled to run this display.</noscript>
 <script>
@@ -254,7 +255,15 @@
       areas[area][group]++;
       if (v.nextAction && due && due <= today+30*86400000) follow.push({time:due,title:v.name || 'Unnamed',detail:(due < today ? 'OVERDUE · ' : '')+v.nextActionDate+' · '+v.nextAction+' · '+(v.statusStage || '')});
     });
-    addPages(next,'Applicants ('+a.length+')',a,4,card);
+    // One continuous, compact roster. Existing slide scrolling reveals overflow
+    // without splitting applicants into separate four-card pages.
+    var roster = '<table class="roster"><thead><tr><th>Applicant</th><th>Stage</th><th>Area</th><th>Next action / status</th></tr></thead><tbody>';
+    a.forEach(function (v) {
+      var due = v.nextActionDate ? esc(v.nextActionDate) : '';
+      roster += '<tr><td><strong>'+esc(v.name || 'Unnamed')+'</strong>'+(review(v) ? '<div class="review">REVIEW</div>' : '')+'</td><td>'+esc(v.statusStage || '—')+'</td><td>'+esc(v.generalArea || v.area || v.location || '—')+'</td><td>'+esc(v.nextAction || '—')+(due ? '<div class="next">Due '+due+'</div>' : '')+'</td></tr>';
+    });
+    roster += '</tbody></table>';
+    next.push({title:'Applicants ('+a.length+')',html:a.length ? roster : panel('Applicants','No entries to display.')});
     calendar.forEach(function (e) { if (e.time >= today && e.time < today+86400000) follow.push({time:e.time,title:e.title,detail:e.when+' · '+e.location}); });
     follow.sort(function (x,y) { return x.time-y.time; });
     addPages(next,'Today / Follow-ups',follow,5,function (e) { return panel(e.title,esc(e.detail)); });
@@ -333,7 +342,7 @@
     if (saved && typeof saved.refreshToken === 'string' && typeof saved.uid === 'string') { session = saved; session.expires = 0; $('login').hidden = true; $('signout').hidden = false; $('inner').innerHTML = '<div class="panel">Restoring saved session… No data downloaded yet.</div>'; }
   } catch (e) { remove(AUTH_KEY); }
   lastReloadDay = stored(AUTH_KEY+'.reload') || dateKey(new Date());
-  setInterval(poll,15000);
+  setInterval(poll,300000);
   setInterval(function () { if (Date.now()-calendarGood >= 5*60000) loadCalendar(); },15000);
   setInterval(rotate,100);
   setInterval(function () { status(); dailyReload(); },30000);
