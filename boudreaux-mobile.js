@@ -7,7 +7,7 @@ var prefs={corner:'left',quiet:false,hidden:false};
 try{var saved=JSON.parse(localStorage.getItem('pibase-boudreaux-v21')||'{}');if(saved&&typeof saved==='object'){prefs.corner=saved.corner==='right'?'right':'left';prefs.quiet=!!saved.quiet;prefs.hidden=!!saved.hidden;}}catch(e){}
 function save(){try{localStorage.setItem('pibase-boudreaux-v21',JSON.stringify(prefs));}catch(e){}}
 var reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-var poses={idle:[0,0,0,1,0,0],wave:[2,0,2,0],salute:[3,0,3,0],think:[9,9,0],sleep:[10,11,11],celebrate:[8,0,8,0],walk:[4,5,4,5],point:[6,0,6,0],work:[7,9,7,9]};
+var poses={idle:[0],talk:[1,0],salute:[5],think:[2],sleep:[11],celebrate:[6,10,6,10],walk:[8,9,8,9],point:[7],work:[3,4,3,4]};
 var current='idle',until=0,ticks=0,lastActivity=Date.now(),data={items:[],target:0,fiscalYear:null,active:0},panelOpen=false,tab='brief',host,sprite,panel,launcher;
 function el(tag,cls,content){var n=document.createElement(tag);if(cls)n.className=cls;if(content!==undefined)n.textContent=content;return n;}
 function play(name,duration){if(!poses[name])return;current=name;until=Date.now()+(duration||1800);ticks=0;frame(poses[name][0]);if(host){host.setAttribute('data-mood',name);if(name==='celebrate'&&!reduce){host.classList.remove('bd-pop');void host.offsetWidth;host.classList.add('bd-pop');}}}
@@ -43,7 +43,7 @@ body.appendChild(btn('Mission settings',function(){navigate('mission');}));
 body.appendChild(btn('Open calendar',function(){window.location.href='./events.html';}));
 }else{
 body.appendChild(line('A battle buddy, not another chore. No streaks or penalties.'));
-body.appendChild(btn('Wave hello',function(){closePanel();play('wave',2200);}));
+body.appendChild(btn('Say hello',function(){closePanel();play('talk',2200);}));
 body.appendChild(btn('Take a stroll',function(){closePanel();play('walk',2800);}));
 body.appendChild(btn('Victory dance',function(){closePanel();play('celebrate',2400);}));
 body.appendChild(btn('Move to '+(prefs.corner==='left'?'right':'left')+' corner',function(){prefs.corner=prefs.corner==='left'?'right':'left';save();applyPrefs();renderPanel();}));
@@ -112,7 +112,7 @@ window.addEventListener('resize',renderVisibility);
 window.addEventListener('pibase:boudreaux-data',function(e){if(!e.detail)return;data=e.detail; if(panelOpen)renderPanel();});
 window.addEventListener('pibase:boudreaux-celebrate',function(){if(!prefs.quiet)play('celebrate',2000);});
 window.addEventListener('offline',function(){if(!prefs.quiet)play('think',2500);});
-window.addEventListener('online',function(){if(!prefs.quiet)play('wave',2000);});
+window.addEventListener('online',function(){if(!prefs.quiet)play('talk',2000);});
 var probe=new Image();probe.onerror=function(){host.hidden=true;restore.hidden=true;};probe.src='./assets/boudreaux-sprites.webp';
 frame(0);host.setAttribute('data-mood','idle');applyPrefs();
 window.setInterval(function(){renderVisibility();if(host.hidden||reduce)return;ticks++;if(Date.now()>until){var idleFor=Date.now()-lastActivity;if(idleFor>180000)current='sleep';else if(!prefs.quiet&&!panelOpen&&ticks%37===0){play('walk',2400);}else current='idle';}host.setAttribute('data-mood',current);var seq=poses[current];frame(seq[ticks%seq.length]);},450);

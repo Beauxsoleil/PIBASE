@@ -27,22 +27,23 @@ function calc(){
           distance:urgency,left:left,remaining:remaining};
 }
 
-/* ---------- sprite poses: 4x3 sneaky atlas, frames 0-11 ----------
- * 0 smirk  1 shush  2 tiptoe  3 crouch | 4 tail-hide  5 taunt  6 pounce
- * 7 catch (two characters) | 8 raccoon victory  9 surprise  10 stumble
- * 11 Boudreaux victory / gracious defeat (two characters) */
+/* ---------- sprite poses: 4x3 action atlas, frames 0-11 ----------
+ * 0 idle/smug  1 talking  2 thinking  3 clipboard work | 4 clipboard holding
+ * 5 hat tipping  6 laughing  7 pointing | 8 sneaking  9 running
+ * 10 victory celebration  11 sleeping */
 var poses={
-  idle:[0,0,0,0,1,0],
-  walk:[2,3,2,3],
-  sneak:[1,2,3,4,2,3],
-  taunt:[5,5,1,5],
-  think:[0,1,0,1],
-  celebrate:[8,8,5,8],
-  sleep:[0,0,0,0],
-  react:[9,9,10,9],
-  salute:[0,0],
-  catch:[6,7,8,8,8,8],
-  defeat:[9,10,11,11,11,11]
+  idle:[0],
+  talk:[1,0],
+  think:[2],
+  sneak:[8],
+  walk:[8,9],
+  taunt:[7,0,7],
+  celebrate:[10,6,10],
+  sleep:[11],
+  react:[2,5],
+  salute:[5],
+  catch:[10,6,10,6],
+  defeat:[5,9,11]
 };
 var current='idle',until=0,ticks=0,lastActivity=Date.now(),panelOpen=false;
 var lastStatus='',lastConfirmed=null,assetReady=false;
@@ -52,19 +53,19 @@ var FINALE_MS=4200;
 try{previousSnapshot=JSON.parse(localStorage.getItem('pibase-thibideaux-last-month')||'null');}catch(e){}
 function persistSnapshot(){if(mission.ready&&mission.month===monthNow()&&mission.target>0){previousSnapshot={month:mission.month,target:mission.target,confirmed:mission.confirmed};try{localStorage.setItem('pibase-thibideaux-last-month',JSON.stringify(previousSnapshot));}catch(e){}}}
 /* One-shot monthly finale. Plays once per month+kind (localStorage key).
- * Frames 7/11 are two-character storyboards, so Boudreaux's live sprite is
- * hidden for the finale via the rivalry-finale event and restored on 'end'.
- * Quiet mode and reduced motion suppress the storyboard (no Boudreaux hide). */
+ * Single-character frames: Boudreaux stays visible and plays his own reaction
+ * (celebrate on win, think on catch) via the rivalry-finale event.
+ * Quiet mode and reduced motion suppress the finale visuals. */
 function finale(kind,month){
   var key=month+':'+kind,dup=false;
   try{if(localStorage.getItem(finaleKey)===key)dup=true;else localStorage.setItem(finaleKey,key);}catch(e){}
   if(dup||!prefs.enabled||prefs.quiet||reduce||!assetReady)return;
   play(kind==='catch'?'catch':'defeat',FINALE_MS);
-  window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'start',hideBoudreaux:true}}));
+  window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'start',hideBoudreaux:false}}));
   if(finaleTimer)window.clearTimeout(finaleTimer);
   finaleTimer=window.setTimeout(function(){
     finaleTimer=null;
-    window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'end',hideBoudreaux:true}}));
+    window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'end',hideBoudreaux:false}}));
   },FINALE_MS);
 }
 function checkPreviousMonth(){if(!previousSnapshot||!mission.ready||mission.month!==monthNow()||previousSnapshot.month===monthNow())return;var old=previousSnapshot;if(!/^\d{4}-\d{2}$/.test(old.month))return;var now=new Date(),prior=new Date(now.getFullYear(),now.getMonth()-1,1);var expected=prior.getFullYear()+'-'+String(prior.getMonth()+1).padStart(2,'0');if(old.month!==expected)return;finale(old.confirmed>=old.target?'win':'catch',old.month);previousSnapshot=null;try{localStorage.removeItem('pibase-thibideaux-last-month');}catch(e){}}
