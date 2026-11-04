@@ -76,24 +76,25 @@
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
   }
   function playFinale(kind, month) {
+    if (!assetReady || hidden || reduced) return false;
     var identity = month + ':' + kind;
     try {
-      if (localStorage.getItem(finaleKey) === identity) return;
+      if (localStorage.getItem(finaleKey) === identity) return true;
       localStorage.setItem(finaleKey, identity);
     } catch (e) {}
-    if (hidden || reduced || !assetReady) return;
     play(kind === 'catch' ? 'catch' : 'defeat', 4200);
     if (window.Boudreaux && window.Boudreaux.play)
       window.Boudreaux.play(kind === 'catch' ? 'think' : 'celebrate', 4200);
     if (finaleTimer) window.clearTimeout(finaleTimer);
     finaleTimer = window.setTimeout(function () { finaleTimer = 0; }, 4200);
+    return true;
   }
   function checkMonthEnd() {
     if (!prior || !/^\\d{4}-\\d{2}$/.test(prior.month)) return;
     if (prior.month === currentMonth()) return;
     // Only close the immediately preceding month; older saved state is stale.
-    if (prior.month === previousMonth() && prior.target > 0)
-      playFinale(prior.confirmed >= prior.target ? 'win' : 'catch', prior.month);
+    if (prior.month === previousMonth() && prior.target > 0 &&
+        !playFinale(prior.confirmed >= prior.target ? 'win' : 'catch', prior.month)) return;
     prior = null;
     try { localStorage.removeItem(snapshotKey); } catch (e) {}
   }
@@ -180,7 +181,7 @@
     setFrame(0);
     host.hidden = true;
     var probe = new Image();
-    probe.onload = function () { assetReady = true; setVisible(!hidden); positionToggle(); };
+    probe.onload = function () { assetReady = true; setVisible(!hidden); updateRivalry(); positionToggle(); };
     probe.onerror = function () { assetReady = false; host.hidden = true; button.hidden = true; };
     probe.src = './assets/thibideaux-sprites.webp';
     window.addEventListener('pibase:thibodeaux-mission', function (event) {
