@@ -48,6 +48,7 @@ body.appendChild(btn('Take a stroll',function(){closePanel();play('walk',2800);}
 body.appendChild(btn('Victory dance',function(){closePanel();play('celebrate',2400);}));
 body.appendChild(btn('Move to '+(prefs.corner==='left'?'right':'left')+' corner',function(){prefs.corner=prefs.corner==='left'?'right':'left';save();applyPrefs();renderPanel();}));
 body.appendChild(btn(prefs.quiet?'Enable reactions':'Quiet mode',function(){prefs.quiet=!prefs.quiet;save();renderPanel();}));
+body.appendChild(btn('Toggle Thibideaux visibility',function(){window.dispatchEvent(new Event('pibase:thibideaux-toggle'));}));
 body.appendChild(btn('Hide Boudreaux',function(){prefs.hidden=true;save();applyPrefs();closePanel();}));
 body.appendChild(line('To restore after hiding, use the Boudreaux setting in this page: see the floating restore control.'));
 }
