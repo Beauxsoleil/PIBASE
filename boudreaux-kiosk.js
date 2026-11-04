@@ -39,15 +39,15 @@
   var latestRecords = null;
   var lastDueDay = '';
   var poses = {
-    idle: [0, 0, 0, 0, 1, 0],
-    wave: [2, 0, 2, 0, 2, 0],
-    salute: [3, 0, 3, 0],
-    walk: [4, 5, 4, 5],
-    point: [6, 0, 6, 0],
-    working: [7, 7, 9, 7],
-    celebrate: [8, 0, 8, 0],
-    think: [9, 9, 7, 9],
-    sleepy: [10, 11, 11, 11]
+    idle: [0],
+    talk: [1, 0],
+    salute: [5],
+    walk: [8, 9],
+    point: [7],
+    working: [3, 4],
+    celebrate: [6, 10],
+    think: [2],
+    sleepy: [11]
   };
 
   function init() {
@@ -138,7 +138,7 @@
       updateDueStatus(true);
     });
     window.addEventListener('offline', function () { play('think', 4000); });
-    window.addEventListener('online', function () { play('wave', 2500); });
+    window.addEventListener('online', function () { play('talk', 2500); });
     // Keep a low fixed animation cadence for the Raspberry Pi 2 CPU/GPU.
     window.setInterval(tick, 650);
     window.Boudreaux = { play: play, hide: function () { setHidden(true); }, show: function () { setHidden(false); } }; // Optional read-only demo or future integrations.
@@ -214,7 +214,7 @@
       return;
     }
     // Quiet idle breathing / blink — does not run a costly per-pixel animation.
-    setFrame(ticks % 15 === 0 ? 1 : 0);
+    setFrame(0);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
