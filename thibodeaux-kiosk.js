@@ -12,6 +12,8 @@
   var mission = { month: '', target: 0, confirmed: 0 };
   var lastStatus = '';
   var lastConfirmed = null;
+  var lastMonth = '';
+  var lastTarget = 0;
   var assetReady = false;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var poses = {
@@ -68,16 +70,19 @@
     var spriteWidth = width <= 1100 ? 100 : 144;
     var wanted = 10 + width * shift / 100;
     host.style.left = Math.max(8, Math.min(wanted, width / 2 - spriteWidth - 12)) + 'px';
-    if (lastStatus && lastStatus !== status) {
+    var confirmedIncrease = lastMonth === mission.month && lastTarget === mission.target &&
+      lastConfirmed !== null && mission.confirmed > lastConfirmed;
+    if (confirmedIncrease && lastStatus !== status) {
       if (status === 'achieved') {
         play('think', 2600);
         if (window.Boudreaux && window.Boudreaux.play) window.Boudreaux.play('celebrate', 2600);
       } else if (status === 'risk') play('sneak', 2400);
     }
     // A confirmed count increase is an explicit event, unlike a page refresh.
-    if (lastConfirmed !== null && mission.month === currentMonth() &&
-        mission.confirmed > lastConfirmed && status !== 'achieved') play('think', 1800);
+    if (confirmedIncrease && mission.month === currentMonth() && status !== 'achieved') play('think', 1800);
     lastConfirmed = mission.month === currentMonth() ? mission.confirmed : null;
+    lastMonth = mission.month;
+    lastTarget = mission.target;
     lastStatus = status;
   }
   function init() {
