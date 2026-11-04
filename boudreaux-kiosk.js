@@ -10,7 +10,6 @@
   window.__PIBASE_BOUDREAUX__ = true;
 
   var sheetUrl = './assets/boudreaux-sprites.webp';
-  var CELL = 362;
   var cols = 4;
   var preferenceKey = 'pibase-boudreaux-kiosk-visible-v1';
   var hidden = false;
@@ -55,15 +54,16 @@
     if (document.getElementById('boudreauxCompanion')) return;
     var style = document.createElement('style');
     style.textContent = '\
-      #boudreauxCompanion{position:fixed;right:24px;bottom:55px;z-index:15;width:172px;max-width:25vw;text-align:center;pointer-events:none;user-select:none;opacity:.98}\
+      #boudreauxCompanion{position:fixed;right:24px;bottom:55px;z-index:15;width:172px;max-width:25vw;max-height:calc(100vh - 110px);text-align:center;pointer-events:none;user-select:none;opacity:.98}\
       #boudreauxCompanion[hidden]{display:none!important}\
       #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;image-rendering:auto}\
-      #boudreauxStatus{position:absolute;right:0;bottom:100%;max-width:220px;min-width:120px;padding:6px 9px;border:1px solid #826b3c;border-radius:5px;background:#17231f;color:#e4c47c;font:12px/1.4 monospace;white-space:normal;text-align:left;box-sizing:border-box}\
+      #boudreauxStatus{position:absolute;right:0;bottom:100%;max-width:min(220px,calc(100vw - 24px));min-width:120px;max-height:80px;overflow:hidden;padding:6px 9px;border:1px solid #826b3c;border-radius:5px;background:#17231f;color:#e4c47c;font:12px/1.4 monospace;white-space:normal;text-align:left;box-sizing:border-box}\
       #boudreauxStatus[hidden]{display:none!important}\
       #boudreauxHide{position:fixed;right:12px;bottom:12px;z-index:16;background:rgba(23,35,31,.92);color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxHide[hidden]{display:none!important}\
       #boudreauxRestore{position:fixed;right:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxRestore[hidden]{display:none!important}\
+      @media(max-height:500px){#boudreauxCompanion{bottom:42px;width:92px}#boudreauxSprite{width:88px;height:88px}#boudreauxStatus{font-size:10px;max-height:46px}}\
       @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}}\
       @media(max-width:700px){#boudreauxCompanion{display:none!important}}\
       @media print{#boudreauxCompanion,#boudreauxHide,#boudreauxRestore{display:none!important}}';
@@ -195,8 +195,9 @@
   }
   function tick() {
     var host = document.getElementById('boudreauxCompanion');
-    if (!host || host.hidden || document.hidden) return;
+    if (!host || document.hidden) return;
     updateDueStatus(false);
+    if (host.hidden) return;
     // Hide when applicant detail is open, so the mascot never covers records.
     var detail = document.getElementById('detailView');
     host.style.visibility = detail && detail.classList.contains('open') ? 'hidden' : 'visible';
