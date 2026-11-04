@@ -183,7 +183,7 @@ function init(){
     checkPreviousMonth();persistSnapshot();
     var c=calc();
     if(c.status==='achieved'&&lastStatus!=='achieved')achievedAt=Date.now();
-    if(c.status==='achieved'&&lastStatus&&lastStatus!=='achieved'&&mission.month===monthNow())finale('win',mission.month);
+    if(c.status==='achieved'&&lastStatus!=='achieved'&&mission.month===monthNow())finale('win',mission.month);
     else if(lastConfirmed!==null&&mission.confirmed>lastConfirmed&&!prefs.quiet)play('react',2000);
     else if(lastStatus&&lastStatus!==c.status&&c.status!=='achieved'&&!prefs.quiet)play('react',1500);
     lastStatus=c.status;lastConfirmed=mission.confirmed;
