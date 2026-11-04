@@ -11,6 +11,8 @@
   var hidden = false, frame = -1, tickCount = 0, until = 0, pose = 'idle';
   var mission = { month: '', target: 0, confirmed: 0 };
   var lastStatus = '';
+  var lastConfirmed = null;
+  var assetReady = false;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var poses = {
     idle: [0], talk: [1, 0], think: [2], work: [3, 4],
@@ -22,7 +24,7 @@
     hidden = !show;
     var host = document.getElementById('thibodeauxKiosk');
     var toggle = document.getElementById('thibodeauxKioskToggle');
-    if (host) host.hidden = hidden;
+    if (host) host.hidden = hidden || !assetReady;
     if (toggle) toggle.textContent = hidden ? 'Show Thibodeaux' : 'Hide Thibodeaux';
     if (hidden) { pose = 'idle'; until = 0; }
     try { localStorage.setItem(key, hidden ? 'hidden' : 'visible'); } catch (e) {}
@@ -61,13 +63,18 @@
     // Keep Thibodeaux on the left side of the display. Only change position
     // on mission updates or calendar changes; never animate CSS layout per tick.
     var shift = status === 'risk' ? 22 : status === 'close' ? 12 : 0;
-    host.style.left = 'calc(18px + ' + shift + 'vw)';
+    // Keep the character in the left half; avoid the right-side mascot and TV edge.
+    host.style.left = 'min(calc(10px + ' + shift + 'vw), calc(50vw - 120px))';
     if (lastStatus && lastStatus !== status) {
       if (status === 'achieved') {
         play('think', 2600);
         if (window.Boudreaux && window.Boudreaux.play) window.Boudreaux.play('celebrate', 2600);
       } else if (status === 'risk') play('sneak', 2400);
     }
+    // A confirmed count increase is an explicit event, unlike a page refresh.
+    if (lastConfirmed !== null && mission.month === currentMonth() &&
+        mission.confirmed > lastConfirmed && status !== 'achieved') play('think', 1800);
+    lastConfirmed = mission.month === currentMonth() ? mission.confirmed : null;
     lastStatus = status;
   }
   function init() {
@@ -96,10 +103,10 @@
     button.type = 'button';
     button.addEventListener('click', function () { setVisible(hidden); });
     document.body.appendChild(button);
-    setVisible(!hidden);
     setFrame(0);
     var probe = new Image();
-    probe.onerror = function () { host.hidden = true; button.hidden = true; };
+    probe.onload = function () { assetReady = true; setVisible(!hidden); };
+    probe.onerror = function () { assetReady = false; host.hidden = true; button.hidden = true; };
     probe.src = './assets/thibideaux-sprites.webp';
     window.addEventListener('pibase:thibodeaux-mission', function (event) {
       var data = event.detail || {};
@@ -111,7 +118,7 @@
     window.addEventListener('offline', function () { play('think', 2400); });
     window.addEventListener('online', function () { play('hat', 1800); });
     window.setInterval(function () {
-      if (hidden || document.hidden) return;
+      if (hidden || !assetReady || document.hidden) return;
       var detail = document.getElementById('detailView');
       host.style.visibility = detail && detail.classList.contains('open') ? 'hidden' : 'visible';
       if (reduced) { setFrame(0); return; }
