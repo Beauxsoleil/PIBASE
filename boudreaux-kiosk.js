@@ -156,7 +156,7 @@
     var due = 0;
     for (var j = 0; j < latestRecords.length; j++) {
       var item = latestRecords[j];
-      if (!item || !item.nextAction || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.nextActionDate || '')) continue;
+      if (!item || !item.nextAction || !/^\d{4}-\d{2}-\d{2}$/.test(item.nextActionDate || '')) continue;
       var parts = item.nextActionDate.split('-');
       var deadline = new Date(+parts[0], +parts[1] - 1, +parts[2]);
       // Reject rolled-over invalid dates, e.g. February 30.
