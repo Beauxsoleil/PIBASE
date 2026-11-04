@@ -19,9 +19,10 @@
     hidden = !!value;
     var host = document.getElementById('boudreauxCompanion');
     if (host) host.hidden = hidden;
+    if (hidden) { animation = null; animationEnd = 0; }
     var restore = document.getElementById('boudreauxRestore');
     if (restore) restore.hidden = !hidden;
-    restore.textContent = 'Show Boudreaux';
+    if (restore) restore.textContent = 'Show Boudreaux';
     var hideButton = document.getElementById('boudreauxHide');
     if (hideButton) hideButton.hidden = hidden;
     try { localStorage.setItem(preferenceKey, hidden ? 'hidden' : 'visible'); } catch (e) {}
@@ -63,7 +64,7 @@
       #boudreauxRestore[hidden]{display:none!important}\
       @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}}\
       @media(max-width:700px){#boudreauxCompanion{display:none!important}}\
-      @media print{#boudreauxCompanion{display:none!important}}';
+      @media print{#boudreauxCompanion,#boudreauxHide,#boudreauxRestore{display:none!important}}';
     document.head.appendChild(style);
     var host = document.createElement('aside');
     host.id = 'boudreauxCompanion';
@@ -138,7 +139,7 @@
       var due = 0;
       for (var j = 0; j < records.length; j++) {
         var item = records[j];
-        if (!item || !item.nextAction || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.nextActionDate || '')) continue;
+        if (!item || !item.nextAction || !/^\d{4}-\d{2}-\d{2}$/.test(item.nextActionDate || '')) continue;
         var parts = item.nextActionDate.split('-');
         var deadline = new Date(+parts[0], +parts[1] - 1, +parts[2]).getTime();
         if (deadline <= today) due++;
