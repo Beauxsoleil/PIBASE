@@ -72,8 +72,8 @@
     host.style.left = Math.max(8, Math.min(wanted, width / 2 - spriteWidth - 12)) + 'px';
     var confirmedIncrease = lastMonth === mission.month && lastTarget === mission.target &&
       lastConfirmed !== null && mission.confirmed > lastConfirmed;
-    if (confirmedIncrease && lastStatus !== status) {
-      if (status === 'achieved') {
+    if (lastStatus !== status) {
+      if (status === 'achieved' && confirmedIncrease) {
         play('think', 2600);
         if (window.Boudreaux && window.Boudreaux.play) window.Boudreaux.play('celebrate', 2600);
       } else if (status === 'risk') play('sneak', 2400);
