@@ -1,0 +1,44 @@
+/* Thibideaux: monthly mission rival; counts are explicitly confirmed, never inferred from applicant stages. */
+(function(){
+'use strict';
+if(!/\/(?:index\.html)?$/.test(location.pathname)||window.__PIBASE_THIBIDEAUX__)return;
+window.__PIBASE_THIBIDEAUX__=true;
+var state={target:0,confirmed:0,month:'',ready:false},quiet=false,enabled=true,host,button,panel,tip,lastState='',lastConfirmed=null;
+try{var p=JSON.parse(localStorage.getItem('pibase-thibideaux')||'{}');quiet=!!p.quiet;enabled=p.enabled!==false;}catch(e){}
+function save(){try{localStorage.setItem('pibase-thibideaux',JSON.stringify({quiet:quiet,enabled:enabled}));}catch(e){}}
+function node(tag,cls,text){var x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
+function buttonFor(text,fn){var x=node('button','th-btn',text);x.type='button';x.addEventListener('click',fn);return x;}
+function monthNow(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function calc(){var d=new Date(),days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),left=days-d.getDate()+1,remaining=Math.max(0,state.target-state.confirmed);
+if(!state.ready||state.month!==monthNow()||state.target<=0)return {status:'unconfigured',distance:0,left:left,remaining:0};
+if(!remaining)return {status:'achieved',distance:0,left:left,remaining:0};
+var urgency=Math.min(1,(remaining/state.target)*(0.35+0.65*d.getDate()/days));
+return {status:urgency>=0.65?'risk':urgency>=0.35?'close':'track',distance:urgency,left:left,remaining:remaining};}
+function visible(){var list=document.getElementById('listScreen'),leads=document.getElementById('leadsScreen');return enabled&&!document.hidden&&window.innerWidth<800&&((list&&!list.classList.contains('hidden'))||(leads&&!leads.classList.contains('hidden')))&&!document.querySelector('input:focus,textarea:focus,select:focus');}
+function refresh(){if(!host)return;host.hidden=!visible();var c=calc();host.dataset.status=c.status;var b=document.getElementById('boudreauxMobile');var right=b&&b.classList.contains('bd-right');var width=Math.max(0,window.innerWidth-100);var near=Math.min(width,90);var far=Math.max(near,width-80);var position=c.status==='unconfigured'?far:c.status==='achieved'?far:Math.round(far-(far-near)*c.distance);host.style.left=(right?Math.max(8,window.innerWidth-position-74):position)+'px';host.style.right='auto';if(panel&&!panel.hidden)renderPanel();if(lastState!==c.status){lastState=c.status;host.classList.remove('th-react');void host.offsetWidth;host.classList.add('th-react');}}
+function renderPanel(){panel.replaceChildren();var c=calc(),header=node('div','th-header');header.appendChild(node('strong','', 'Thibideaux'));header.appendChild(buttonFor('Close',function(){panel.hidden=true;}));panel.appendChild(header);
+if(c.status==='unconfigured'){panel.appendChild(node('p','','Monthly mission not configured for '+monthNow()+'. Set a target and confirmed enlistments in the Recruiting mission card.'));panel.appendChild(buttonFor('Open mission settings',function(){panel.hidden=true;window.dispatchEvent(new CustomEvent('pibase:boudreaux-navigate',{detail:{action:'mission'}}));}));}
+else{panel.appendChild(node('p','',c.status==='achieved'?'Well done, cher! Mission accomplished.':c.status==='risk'?'I am right on your tail, cher!':c.status==='close'?'Getting closer now, boss!':'Just patrolling, cher.'));
+[['Monthly goal',state.target],['Confirmed enlistments',state.confirmed],['Remaining',c.remaining],['Days left',c.left]].forEach(function(row){var x=node('div','th-stat');x.appendChild(node('span','',row[0]));x.appendChild(node('strong','',String(row[1])));panel.appendChild(x);});panel.appendChild(node('p','th-muted','Only explicitly confirmed enlistments count. This is a playful indicator, not a prediction.'));}
+panel.appendChild(buttonFor(quiet?'Enable reactions':'Quiet reactions',function(){quiet=!quiet;save();renderPanel();}));
+panel.appendChild(buttonFor('Hide Thibideaux',function(){enabled=false;save();panel.hidden=true;refresh();}));
+}
+function init(){var style=node('style');style.textContent=
+'#thibideaux{position:fixed;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:43;width:74px;height:82px;transition:left 2s ease-in-out;user-select:none}#thibideaux[hidden],#thibideauxPanel[hidden]{display:none!important}'+
+'#thibideauxButton{width:74px;height:82px;border:0;padding:0;background:none;cursor:pointer}#thibideauxArt{width:74px;height:82px;display:block;filter:drop-shadow(0 3px 7px #0008);animation:th-breathe 3s ease-in-out infinite}'+
+'#thibideaux[data-status="risk"] #thibideauxArt{animation:th-sneak 1.1s ease-in-out infinite}#thibideaux.th-react #thibideauxArt{animation:th-jump .5s ease-in-out 3}'+
+'#thibideauxPanel{position:absolute;bottom:90px;right:0;width:min(300px,calc(100vw - 24px));max-height:60vh;overflow:auto;background:#17231d;border:1px solid #ae9158;border-radius:12px;padding:12px;color:#f2f2e8;font:13px/1.5 system-ui;box-shadow:0 8px 30px #0008}'+
+'.th-header,.th-stat{display:flex;justify-content:space-between;align-items:center;gap:8px}.th-header{color:#e0c27f;font-size:16px}.th-stat{border-bottom:1px solid #3e4c42;padding:5px 0}.th-btn{border:1px solid #53644f;border-radius:6px;background:#2b3a30;color:#f2f2e8;padding:8px;margin-top:8px;cursor:pointer}.th-muted{color:#b6c2b7;font-size:11px}'+
+'@keyframes th-breathe{50%{transform:translateY(-3px) rotate(2deg)}}@keyframes th-sneak{50%{transform:translateY(-5px) rotate(-4deg)}}@keyframes th-jump{50%{transform:translateY(-13px) rotate(8deg)}}'+
+'@media(min-width:800px),print{#thibideaux{display:none!important}}@media(prefers-reduced-motion:reduce){#thibideaux,#thibideauxArt{animation:none!important;transition:none!important}}';
+document.head.appendChild(style);host=node('aside');host.id='thibideaux';host.hidden=true;button=node('button');button.id='thibideauxButton';button.type='button';button.setAttribute('aria-label','Open Thibideaux monthly mission');var img=node('img');img.id='thibideauxArt';img.src='./assets/thibideaux.svg';img.alt='';button.appendChild(img);host.appendChild(button);panel=node('section');panel.id='thibideauxPanel';panel.hidden=true;panel.setAttribute('aria-label','Thibideaux mission status');host.appendChild(panel);document.body.appendChild(host);
+button.addEventListener('click',function(){panel.hidden=!panel.hidden;if(!panel.hidden)renderPanel();});
+document.addEventListener('pointerdown',function(e){if(!host.contains(e.target))panel.hidden=true;},{passive:true});
+window.addEventListener('pibase:thibideaux-mission',function(e){var x=e.detail||{};state={target:Number(x.target)||0,confirmed:Number(x.confirmed)||0,month:x.month||'',ready:!!x.ready};if(lastConfirmed!==null&&state.confirmed>lastConfirmed&&!quiet){host.classList.remove('th-react');void host.offsetWidth;host.classList.add('th-react');}lastConfirmed=state.confirmed;refresh();});
+window.addEventListener('resize',refresh);document.addEventListener('focusin',refresh);document.addEventListener('focusout',function(){setTimeout(refresh,150);});
+window.addEventListener('visibilitychange',refresh);
+window.addEventListener('pibase:thibideaux-toggle',function(){enabled=!enabled;save();refresh();});
+refresh();window.setInterval(refresh,20000);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+}());
