@@ -32,8 +32,6 @@
   var animationEnd = 0;
   var frameIndex = -1;
   var ticks = 0;
-  var lastEnlistedIds = null;
-  var lastDataReaction = 0;
   var lastWorkReaction = 0;
   var latestDueCount = -1;
   var latestRecords = null;
@@ -112,29 +110,10 @@
       if (event.detail && event.detail.state === 'error') play('think', 3600);
     });
     window.addEventListener('pibase:applicants-snapshot', function (event) {
-      // A Firestore refresh is not an enlistment. Only react to an actual
-      // newly observed enlisted record after the first successful snapshot.
+      // Applicant stages are operational pipeline data, not confirmed monthly
+      // enlistments. Celebration is driven by the confirmed mission event.
       var records = event.detail;
       if (!Array.isArray(records)) return;
-      var ids = {};
-      for (var i = 0; i < records.length; i++) {
-        var record = records[i];
-        if (!record || !record.id) continue;
-        var stage = String(record.statusStage || '').toLowerCase();
-        if (stage === 'enlisted') ids[String(record.id)] = true;
-      }
-      if (lastEnlistedIds !== null) {
-        var newlyEnlisted = false;
-        for (var id in ids) {
-          if (Object.prototype.hasOwnProperty.call(ids, id) && !lastEnlistedIds[id])
-            newlyEnlisted = true;
-        }
-        if (newlyEnlisted && Date.now() - lastDataReaction > 30000) {
-          lastDataReaction = Date.now();
-          play('celebrate', 2600);
-        }
-      }
-      lastEnlistedIds = ids;
       latestRecords = records;
       updateDueStatus(true);
     });
