@@ -27,9 +27,10 @@ function calc(){
           distance:urgency,left:left,remaining:remaining};
 }
 
-/* ---------- sprite poses: 4x3 atlas, frames 0-11 ----------
- * 0 idle  1 laugh  2 wave  3 salute | 4 walk-a  5 walk-b  6 point  7 tablet |
- * 8 celebrate  9 think  10 taunt  11 sleep */
+/* ---------- sprite poses: 4x3 sneaky atlas, frames 0-11 ----------
+ * 0 smirk  1 shush  2 tiptoe  3 crouch | 4 tail-hide  5 taunt  6 pounce
+ * 7 catch (two characters) | 8 raccoon victory  9 surprise  10 stumble
+ * 11 Boudreaux victory / gracious defeat (two characters) */
 var poses={
   idle:[0,0,0,0,1,0],
   walk:[2,3,2,3],
@@ -44,12 +45,28 @@ var poses={
   defeat:[9,10,11,11,11,11]
 };
 var current='idle',until=0,ticks=0,lastActivity=Date.now(),panelOpen=false;
-var lastStatus='',lastConfirmed=null,achievedAt=0,assetReady=false;
+var lastStatus='',lastConfirmed=null,assetReady=false;
 var host,button,sprite,fallback,panel,restore;
-var previousSnapshot=null,finaleKey='pibase-thibideaux-finale-v1';
+var previousSnapshot=null,finaleKey='pibase-thibideaux-finale-v1',finaleTimer=null;
+var FINALE_MS=4200;
 try{previousSnapshot=JSON.parse(localStorage.getItem('pibase-thibideaux-last-month')||'null');}catch(e){}
 function persistSnapshot(){if(mission.ready&&mission.month===monthNow()&&mission.target>0){previousSnapshot={month:mission.month,target:mission.target,confirmed:mission.confirmed};try{localStorage.setItem('pibase-thibideaux-last-month',JSON.stringify(previousSnapshot));}catch(e){}}}
-function finale(kind,month){var key=month+':'+kind;try{if(localStorage.getItem(finaleKey)===key)return;localStorage.setItem(finaleKey,key);}catch(e){}play(kind==='catch'?'catch':'defeat',4200);window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month}}));}
+/* One-shot monthly finale. Plays once per month+kind (localStorage key).
+ * Frames 7/11 are two-character storyboards, so Boudreaux's live sprite is
+ * hidden for the finale via the rivalry-finale event and restored on 'end'.
+ * Quiet mode and reduced motion suppress the storyboard (no Boudreaux hide). */
+function finale(kind,month){
+  var key=month+':'+kind,dup=false;
+  try{if(localStorage.getItem(finaleKey)===key)dup=true;else localStorage.setItem(finaleKey,key);}catch(e){}
+  if(dup||!prefs.enabled||prefs.quiet||reduce||!assetReady)return;
+  play(kind==='catch'?'catch':'defeat',FINALE_MS);
+  window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'start',hideBoudreaux:true}}));
+  if(finaleTimer)window.clearTimeout(finaleTimer);
+  finaleTimer=window.setTimeout(function(){
+    finaleTimer=null;
+    window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month,phase:'end',hideBoudreaux:true}}));
+  },FINALE_MS);
+}
 function checkPreviousMonth(){if(!previousSnapshot||!mission.ready||mission.month!==monthNow()||previousSnapshot.month===monthNow())return;var old=previousSnapshot;if(!/^\d{4}-\d{2}$/.test(old.month))return;var now=new Date(),prior=new Date(now.getFullYear(),now.getMonth()-1,1);var expected=prior.getFullYear()+'-'+String(prior.getMonth()+1).padStart(2,'0');if(old.month!==expected)return;finale(old.confirmed>=old.target?'win':'catch',old.month);previousSnapshot=null;try{localStorage.removeItem('pibase-thibideaux-last-month');}catch(e){}}
 
 function el(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
@@ -69,10 +86,11 @@ function play(name,duration){
   }
 }
 /* Base pose from mission status. Rivalry: approach as the deadline nears with the
- * mission unfinished; retreat (far + celebrate, then sleep) when it is achieved. */
+ * mission unfinished; keep far and rest when it is achieved (the one-shot
+ * finale covers the celebration — no first-load victory loop). */
 function basePose(){
   var s=calc().status;
-  if(s==='achieved')return (Date.now()-achievedAt<9000)?'defeat':'sleep';
+  if(s==='achieved')return 'sleep';
   if(s==='risk')return 'sneak';
   if(s==='close')return 'walk';
   return 'idle';
@@ -182,7 +200,6 @@ function init(){
     mission={target:Number(x.target)||0,confirmed:Number(x.confirmed)||0,month:x.month||'',ready:!!x.ready};
     checkPreviousMonth();persistSnapshot();
     var c=calc();
-    if(c.status==='achieved'&&lastStatus!=='achieved')achievedAt=Date.now();
     if(c.status==='achieved'&&lastStatus!=='achieved'&&mission.month===monthNow())finale('win',mission.month);
     else if(lastConfirmed!==null&&mission.confirmed>lastConfirmed&&!prefs.quiet)play('react',2000);
     else if(lastStatus&&lastStatus!==c.status&&c.status!=='achieved'&&!prefs.quiet)play('react',1500);
