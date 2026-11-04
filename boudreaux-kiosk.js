@@ -32,7 +32,8 @@
   var animationEnd = 0;
   var frameIndex = -1;
   var ticks = 0;
-  var lastReadyCelebration = 0;
+  var lastEnlistedIds = null;
+  var lastDataReaction = 0;
   var poses = {
     idle: [0, 0, 0, 0, 1, 0],
     wave: [2, 0, 2, 0, 2, 0],
@@ -99,10 +100,30 @@
     window.addEventListener('pibase:firebase-status', function (event) {
       if (event.detail && event.detail.state === 'error') play('think', 3600);
     });
-    window.addEventListener('pibase:applicants-snapshot', function () {
-      if (Date.now() - lastReadyCelebration > 300000) {
-        lastReadyCelebration = Date.now(); play('celebrate', 2500);
+    window.addEventListener('pibase:applicants-snapshot', function (event) {
+      // A Firestore refresh is not an enlistment. Only react to an actual
+      // newly observed enlisted record after the first successful snapshot.
+      var records = event.detail;
+      if (!Array.isArray(records)) return;
+      var ids = {};
+      for (var i = 0; i < records.length; i++) {
+        var record = records[i];
+        if (!record || !record.id) continue;
+        var stage = String(record.statusStage || '').toLowerCase();
+        if (stage === 'enlisted') ids[String(record.id)] = true;
       }
+      if (lastEnlistedIds !== null) {
+        var newlyEnlisted = false;
+        for (var id in ids) {
+          if (Object.prototype.hasOwnProperty.call(ids, id) && !lastEnlistedIds[id])
+            newlyEnlisted = true;
+        }
+        if (newlyEnlisted && Date.now() - lastDataReaction > 30000) {
+          lastDataReaction = Date.now();
+          play('celebrate', 2600);
+        }
+      }
+      lastEnlistedIds = ids;
     });
     window.addEventListener('offline', function () { play('think', 4000); });
     window.addEventListener('online', function () { play('wave', 2500); });
@@ -122,7 +143,7 @@
     node.style.backgroundPosition = (col * 100 / (cols - 1)) + '% ' + (row * 50) + '%';
   }
   function play(name, duration) {
-    if (!poses[name]) return;
+    if (!poses[name] || hidden) return;
     animation = name;
     animationEnd = Date.now() + (duration || 1800);
     ticks = 0;
