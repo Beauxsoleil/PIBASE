@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v8';
+const CACHE_NAME = 'pibase-app-v9';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -14,6 +14,8 @@ const APP_SHELL = [
   'events-ui.js',
   'appointment-reminder.js',
   'kiosk-runtime.js',
+  'assets/boudreaux-sprites.webp',
+  'boudreaux-kiosk.js',
   'pwa-runtime.js',
   'calendar.ics',
   'angrr-seal.png',
@@ -123,7 +125,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (/\.(?:css|png|svg|ico)$/.test(url.pathname)) {
+  if (/\.(?:css|png|webp|svg|ico)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
