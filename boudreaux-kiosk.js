@@ -164,6 +164,12 @@
     var host = document.getElementById('boudreauxCompanion');
     var button = document.getElementById(hidden ? 'boudreauxRestore' : 'boudreauxHide');
     if (!host || !button) return;
+    if (hidden) {
+      button.style.top = 'auto';
+      button.style.bottom = '125px';
+      button.style.right = '8px';
+      return;
+    }
     var rect = host.getBoundingClientRect();
     var badge = document.getElementById('boudreauxStatus');
     var badgeHeight = !hidden && badge && !badge.hidden ? badge.offsetHeight + 5 : 0;
