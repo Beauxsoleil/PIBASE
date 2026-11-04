@@ -56,12 +56,34 @@ body.appendChild(line('To restore after hiding, use the Boudreaux setting in thi
 function navigate(action,id){closePanel();window.dispatchEvent(new CustomEvent('pibase:boudreaux-navigate',{detail:{action:action,id:id||null}}));}
 function applyPrefs(){host.classList.toggle('bd-right',prefs.corner==='right');host.classList.toggle('bd-disabled',prefs.hidden);restore.hidden=!prefs.hidden;renderVisibility();}
 var restore;
+var finaleHideTimer=null;
+function finaleShowBoudreaux(){host.classList.remove('bd-finale-hide');if(finaleHideTimer){window.clearTimeout(finaleHideTimer);finaleHideTimer=null;}}
+/* Synchronized rivalry finale. Thibideaux's frames 7/11 are two-character
+ * storyboards, so the live sprite hides while they play (no duplication),
+ * then restores reliably: on 'end', on a safety timeout, and on tab return.
+ * Never overrides the user's hidden/quiet prefs. */
+window.addEventListener('pibase:rivalry-finale',function(e){
+  var d=e.detail||{};
+  if(!host||prefs.quiet)return;
+  if(d.phase==='start'){
+    if(d.hideBoudreaux&&!reduce&&!host.hidden&&!prefs.hidden){
+      host.classList.add('bd-finale-hide');
+      finaleShowBoudreaux();
+      finaleHideTimer=window.setTimeout(finaleShowBoudreaux,5200);
+    }
+  }else if(d.phase==='end'){
+    finaleShowBoudreaux();
+    if(!host.hidden&&!prefs.hidden)play(d.kind==='win'?'celebrate':'think',d.kind==='win'?4200:3600);
+  }
+});
+window.addEventListener('visibilitychange',function(){if(!document.hidden)finaleShowBoudreaux();});
 function init(){
 var css=el('style');css.textContent=
 '#boudreauxMobile{position:fixed;left:10px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:45;width:82px;user-select:none}'+
 '#boudreauxMobile.bd-right{left:auto;right:10px}#boudreauxMobile[hidden],#boudreauxPanel[hidden],#boudreauxRestore[hidden]{display:none!important}'+
 '#boudreauxLaunch{display:block;width:82px;height:82px;padding:0;border:0;background:transparent;touch-action:manipulation;cursor:pointer}'+
 '#boudreauxMobileSprite{display:block;width:80px;height:80px;background-image:url("./assets/boudreaux-sprites.webp");background-size:400% 300%;background-repeat:no-repeat;filter:drop-shadow(0 3px 7px rgba(0,0,0,.45))}'+
+'#boudreauxMobile.bd-finale-hide #boudreauxMobileSprite{display:none}'+
 '#boudreauxMobile:not(.bd-panel-open) #boudreauxMobileSprite{animation:bd-breathe 3.2s ease-in-out infinite;transform-origin:50% 90%}'+
 '#boudreauxMobile[data-mood="walk"]:not(.bd-panel-open) #boudreauxMobileSprite{animation:bd-walk 0.55s ease-in-out infinite}'+
 '#boudreauxMobile[data-mood="sleep"]:not(.bd-panel-open) #boudreauxMobileSprite{animation:bd-sleep 4.8s ease-in-out infinite}'+
