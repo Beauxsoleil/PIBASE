@@ -34,6 +34,8 @@
   var ticks = 0;
   var lastEnlistedIds = null;
   var lastDataReaction = 0;
+  var lastWorkReaction = 0;
+  var latestDueCount = -1;
   var poses = {
     idle: [0, 0, 0, 0, 1, 0],
     wave: [2, 0, 2, 0, 2, 0],
@@ -53,6 +55,8 @@
       #boudreauxCompanion{position:fixed;right:24px;bottom:55px;z-index:15;width:172px;max-width:25vw;text-align:center;pointer-events:none;user-select:none;opacity:.98}\
       #boudreauxCompanion[hidden]{display:none!important}\
       #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;image-rendering:auto}\
+      #boudreauxStatus{position:absolute;right:0;bottom:100%;max-width:220px;min-width:120px;padding:6px 9px;border:1px solid #826b3c;border-radius:5px;background:#17231f;color:#e4c47c;font:12px/1.4 monospace;white-space:normal;text-align:left;box-sizing:border-box}\
+      #boudreauxStatus[hidden]{display:none!important}\
       #boudreauxHide{position:fixed;right:12px;bottom:12px;z-index:16;background:rgba(23,35,31,.92);color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxHide[hidden]{display:none!important}\
       #boudreauxRestore{position:fixed;right:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
@@ -66,6 +70,9 @@
     host.setAttribute('aria-hidden', 'true');
     var sprite = document.createElement('div'); sprite.id = 'boudreauxSprite';
     host.appendChild(sprite);
+    var status = document.createElement('div');
+    status.id = 'boudreauxStatus'; status.hidden = true;
+    host.appendChild(status);
     document.body.appendChild(host);
     var restore = document.createElement('button');
     restore.id = 'boudreauxRestore'; restore.type = 'button'; restore.textContent = 'Show Boudreaux';
@@ -124,6 +131,29 @@
         }
       }
       lastEnlistedIds = ids;
+      // Display only an aggregate follow-up count; never expose applicant names
+      // in the kiosk mascot. Due dates are parsed as local calendar dates.
+      var now = new Date();
+      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      var due = 0;
+      for (var j = 0; j < records.length; j++) {
+        var item = records[j];
+        if (!item || !item.nextAction || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.nextActionDate || '')) continue;
+        var parts = item.nextActionDate.split('-');
+        var deadline = new Date(+parts[0], +parts[1] - 1, +parts[2]).getTime();
+        if (deadline <= today) due++;
+      }
+      var badge = document.getElementById('boudreauxStatus');
+      if (badge) {
+        badge.hidden = due === 0;
+        if (due > 0) badge.textContent = due + (due === 1 ? ' follow-up due' : ' follow-ups due');
+      }
+      if (due > latestDueCount && latestDueCount >= 0 &&
+          Date.now() - lastWorkReaction > 60000 && !hidden) {
+        lastWorkReaction = Date.now();
+        play('working', 2500);
+      }
+      latestDueCount = due;
     });
     window.addEventListener('offline', function () { play('think', 4000); });
     window.addEventListener('online', function () { play('wave', 2500); });
