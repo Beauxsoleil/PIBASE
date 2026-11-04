@@ -64,7 +64,10 @@
     // on mission updates or calendar changes; never animate CSS layout per tick.
     var shift = status === 'risk' ? 22 : status === 'close' ? 12 : 0;
     // Keep the character in the left half; avoid the right-side mascot and TV edge.
-    host.style.left = 'min(calc(10px + ' + shift + 'vw), calc(50vw - 120px))';
+    var width = window.innerWidth || document.documentElement.clientWidth || 1024;
+    var spriteWidth = width <= 1100 ? 100 : 144;
+    var wanted = 10 + width * shift / 100;
+    host.style.left = Math.max(8, Math.min(wanted, width / 2 - spriteWidth - 12)) + 'px';
     if (lastStatus && lastStatus !== status) {
       if (status === 'achieved') {
         play('think', 2600);
