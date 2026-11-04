@@ -56,6 +56,7 @@ body.appendChild(line('To restore after hiding, use the Boudreaux setting in thi
 function navigate(action,id){closePanel();window.dispatchEvent(new CustomEvent('pibase:boudreaux-navigate',{detail:{action:action,id:id||null}}));}
 function applyPrefs(){host.classList.toggle('bd-right',prefs.corner==='right');host.classList.toggle('bd-disabled',prefs.hidden);restore.hidden=!prefs.hidden;renderVisibility();}
 var restore;
+window.addEventListener('pibase:rivalry-finale',function(e){var d=e.detail||{};if(!host||host.hidden||prefs.quiet)return;if(d.kind==='win')play('celebrate',4200);else if(d.kind==='catch')play('think',3600);});
 function init(){
 var css=el('style');css.textContent=
 '#boudreauxMobile{position:fixed;left:10px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:45;width:82px;user-select:none}'+
