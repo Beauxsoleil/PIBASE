@@ -39,11 +39,18 @@ var poses={
   celebrate:[8,8,2,8,2,8],
   sleep:[11,11,11,11],
   react:[2,2,0,2,0],
-  salute:[3,0,3,0]
+  salute:[3,0,3,0],
+  catch:[2,6,8,8,8,0],
+  defeat:[10,9,10,11,11,0]
 };
 var current='idle',until=0,ticks=0,lastActivity=Date.now(),panelOpen=false;
 var lastStatus='',lastConfirmed=null,achievedAt=0,assetReady=false;
 var host,button,sprite,fallback,panel,restore;
+var previousSnapshot=null,finaleKey='pibase-thibideaux-finale-v1';
+try{previousSnapshot=JSON.parse(localStorage.getItem('pibase-thibideaux-last-month')||'null');}catch(e){}
+function persistSnapshot(){if(mission.ready&&mission.month===monthNow()&&mission.target>0){previousSnapshot={month:mission.month,target:mission.target,confirmed:mission.confirmed};try{localStorage.setItem('pibase-thibideaux-last-month',JSON.stringify(previousSnapshot));}catch(e){}}}
+function finale(kind,month){var key=month+':'+kind;try{if(localStorage.getItem(finaleKey)===key)return;localStorage.setItem(finaleKey,key);}catch(e){}play(kind==='catch'?'catch':'defeat',4200);window.dispatchEvent(new CustomEvent('pibase:rivalry-finale',{detail:{kind:kind,month:month}}));}
+function checkPreviousMonth(){if(!previousSnapshot||!mission.ready||mission.month!==monthNow()||previousSnapshot.month===monthNow())return;var old=previousSnapshot;if(!/^\d{4}-\d{2}$/.test(old.month))return;var now=new Date(),prior=new Date(now.getFullYear(),now.getMonth()-1,1);var expected=prior.getFullYear()+'-'+String(prior.getMonth()+1).padStart(2,'0');if(old.month!==expected)return;finale(old.confirmed>=old.target?'win':'catch',old.month);previousSnapshot=null;try{localStorage.removeItem('pibase-thibideaux-last-month');}catch(e){}}
 
 function el(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
 function btn(label,action){var b=el('button','th-btn',label);b.type='button';b.addEventListener('click',action);return b;}
@@ -65,7 +72,7 @@ function play(name,duration){
  * mission unfinished; retreat (far + celebrate, then sleep) when it is achieved. */
 function basePose(){
   var s=calc().status;
-  if(s==='achieved')return (Date.now()-achievedAt<9000)?'celebrate':'sleep';
+  if(s==='achieved')return (Date.now()-achievedAt<9000)?'defeat':'sleep';
   if(s==='risk')return 'sneak';
   if(s==='close')return 'walk';
   return 'idle';
@@ -133,6 +140,9 @@ function init(){
   '#thibideaux[data-mood="sleep"]:not(.th-panel-open) #thibideauxArt{animation:th-sleep 4.8s ease-in-out infinite}'+
   '#thibideaux[data-mood="think"]:not(.th-panel-open) #thibideauxArt{animation:th-think 1.8s ease-in-out infinite}'+
   '#thibideaux.th-pop #thibideauxArt{animation:th-celebrate .55s ease-in-out 3!important}'+
+  '#thibideaux[data-mood="catch"] #thibideauxArt{animation:th-celebrate .55s ease-in-out 4!important}'+
+  '#thibideaux[data-mood="defeat"] #thibideauxArt{animation:th-defeat .9s ease-out 2!important}'+
+  '@keyframes th-defeat{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-5px) rotate(-12deg)}70%{transform:translateY(3px) rotate(12deg)}100%{transform:translateY(0) rotate(0)}}'+
   '@keyframes th-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.025)}}'+
   '@keyframes th-walk{0%,100%{transform:translate(0,0) rotate(-2deg)}50%{transform:translate(12px,-3px) rotate(2deg)}}'+
   '@keyframes th-sneak{0%,100%{transform:translateY(0) rotate(-3deg) scale(1)}50%{transform:translateY(-4px) rotate(3deg) scale(.97)}}'+
@@ -170,10 +180,12 @@ function init(){
   window.addEventListener('pibase:thibideaux-mission',function(e){
     var x=e.detail||{};
     mission={target:Number(x.target)||0,confirmed:Number(x.confirmed)||0,month:x.month||'',ready:!!x.ready};
+    checkPreviousMonth();persistSnapshot();
     var c=calc();
     if(c.status==='achieved'&&lastStatus!=='achieved')achievedAt=Date.now();
-    if(lastConfirmed!==null&&mission.confirmed>lastConfirmed&&!prefs.quiet)play('react',2000);
-    else if(lastStatus&&lastStatus!==c.status&&!prefs.quiet)play('react',1500);
+    if(c.status==='achieved'&&lastStatus&&lastStatus!=='achieved'&&mission.month===monthNow())finale('win',mission.month);
+    else if(lastConfirmed!==null&&mission.confirmed>lastConfirmed&&!prefs.quiet)play('react',2000);
+    else if(lastStatus&&lastStatus!==c.status&&c.status!=='achieved'&&!prefs.quiet)play('react',1500);
     lastStatus=c.status;lastConfirmed=mission.confirmed;
     refresh();
   });
