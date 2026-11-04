@@ -46,9 +46,10 @@
       '#thibodeauxKiosk{position:fixed;left:18px;bottom:54px;width:144px;height:144px;z-index:15;pointer-events:none;user-select:none}' +
       '#thibodeauxKiosk[hidden]{display:none!important}' +
       '#thibodeauxKioskSprite{width:100%;height:100%;background-image:url("./assets/thibideaux-sprites.webp");background-size:400% 300%;background-repeat:no-repeat}' +
-      '#thibodeauxKioskToggle{position:fixed;left:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}' +
+      '#thibodeauxKioskToggle{position:fixed;left:12px;bottom:210px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}' +
       '@media(max-width:1100px){#thibodeauxKiosk{width:100px;height:100px;left:10px;bottom:45px}}' +
       '@media(max-height:500px){#thibodeauxKiosk{width:80px;height:80px;bottom:42px}}' +
+      '@media(max-height:500px){#thibodeauxKioskToggle{bottom:145px}}' +
       '@media(max-width:700px){#thibodeauxKiosk,#thibodeauxKioskToggle{display:none!important}}' +
       '@media print{#thibodeauxKiosk,#thibodeauxKioskToggle{display:none!important}}';
     document.head.appendChild(style);
