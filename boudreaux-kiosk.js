@@ -59,10 +59,11 @@
       #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;image-rendering:auto}\
       #boudreauxStatus{position:absolute;right:0;bottom:100%;max-width:min(220px,calc(100vw - 24px));min-width:120px;max-height:80px;overflow:hidden;padding:6px 9px;border:1px solid #826b3c;border-radius:5px;background:#17231f;color:#e4c47c;font:12px/1.4 monospace;white-space:normal;text-align:left;box-sizing:border-box}\
       #boudreauxStatus[hidden]{display:none!important}\
-      #boudreauxHide{position:fixed;right:12px;bottom:12px;z-index:16;background:rgba(23,35,31,.92);color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
+      #boudreauxHide{position:fixed;right:12px;bottom:230px;z-index:16;background:rgba(23,35,31,.92);color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxHide[hidden]{display:none!important}\
-      #boudreauxRestore{position:fixed;right:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
+      #boudreauxRestore{position:fixed;right:12px;bottom:110px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxRestore[hidden]{display:none!important}\
+      @media(max-height:500px){#boudreauxHide{bottom:145px}#boudreauxRestore{bottom:85px}}\
       @media(max-height:500px){#boudreauxCompanion{bottom:42px;width:92px}#boudreauxSprite{width:88px;height:88px}#boudreauxStatus{font-size:10px;max-height:46px}}\
       @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}}\
       @media(max-width:700px){#boudreauxCompanion{display:none!important}}\
