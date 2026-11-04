@@ -29,6 +29,7 @@
     if (host) host.hidden = hidden || !assetReady;
     if (toggle) { toggle.textContent = hidden ? 'Show Thibodeaux' : 'Hide'; toggle.setAttribute('aria-label', hidden ? 'Show Thibodeaux' : 'Hide Thibodeaux'); }
     if (hidden) { pose = 'idle'; until = 0; }
+    if (assetReady) positionToggle();
     try { localStorage.setItem(key, hidden ? 'hidden' : 'visible'); } catch (e) {}
   }
   function setFrame(n) {
@@ -76,6 +77,7 @@
     var spriteWidth = width <= 1100 ? 100 : 144;
     var wanted = 10 + width * shift / 100;
     host.style.left = Math.max(8, Math.min(wanted, width / 2 - spriteWidth - 12)) + 'px';
+    positionToggle();
     var confirmedIncrease = lastMonth === mission.month && lastTarget === mission.target &&
       lastConfirmed !== null && mission.confirmed > lastConfirmed;
     if (lastStatus !== status) {
@@ -91,6 +93,20 @@
     lastTarget = mission.target;
     lastStatus = status;
   }
+  function positionToggle() {
+    var host = document.getElementById('thibodeauxKiosk');
+    var button = document.getElementById('thibodeauxKioskToggle');
+    if (!host || !button) return;
+    // Anchor the control above both the sprite and its optional mission badge.
+    // The mascot moves with the rivalry, so a fixed CSS offset is insufficient.
+    var rect = host.getBoundingClientRect();
+    var badge = document.getElementById('thibodeauxKioskMission');
+    var badgeHeight = badge && !badge.hidden ? badge.offsetHeight + 5 : 0;
+    var top = Math.max(6, rect.top - badgeHeight - button.offsetHeight - 7);
+    button.style.top = top + 'px';
+    button.style.bottom = 'auto';
+    button.style.left = Math.max(6, rect.left) + 'px';
+  }
   function init() {
     if (document.getElementById('thibodeauxKiosk')) return;
     var style = document.createElement('style');
@@ -100,10 +116,9 @@
       '#thibodeauxKioskMission{position:absolute;left:0;bottom:100%;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:4px;padding:4px 6px;font:11px monospace;white-space:nowrap}' +
       '#thibodeauxKioskMission[hidden]{display:none!important}' +
       '#thibodeauxKioskSprite{width:100%;height:100%;background-image:url("./assets/thibideaux-sprites.webp");background-size:400% 300%;background-repeat:no-repeat}' +
-      '#thibodeauxKioskToggle{position:fixed;left:8px;bottom:206px;z-index:40;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:6px 8px;font:11px monospace;cursor:pointer}' +
-      '@media(max-width:1100px){#thibodeauxKiosk{width:100px;height:100px;left:10px;bottom:45px}#thibodeauxKioskToggle{bottom:153px}}' +
+      '#thibodeauxKioskToggle{position:fixed;left:8px;top:8px;z-index:40;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:6px 8px;font:11px monospace;cursor:pointer}' +
+      '@media(max-width:1100px){#thibodeauxKiosk{width:100px;height:100px;left:10px;bottom:45px}}' +
       '@media(max-height:500px){#thibodeauxKiosk{width:80px;height:80px;bottom:42px}}' +
-      '@media(max-height:500px){#thibodeauxKioskToggle{bottom:130px}}' +
       '@media(max-width:700px){#thibodeauxKiosk,#thibodeauxKioskToggle{display:none!important}}' +
       '@media print{#thibodeauxKiosk,#thibodeauxKioskToggle{display:none!important}}';
     document.head.appendChild(style);
@@ -125,7 +140,7 @@
     setFrame(0);
     host.hidden = true;
     var probe = new Image();
-    probe.onload = function () { assetReady = true; setVisible(!hidden); };
+    probe.onload = function () { assetReady = true; setVisible(!hidden); positionToggle(); };
     probe.onerror = function () { assetReady = false; host.hidden = true; button.hidden = true; };
     probe.src = './assets/thibideaux-sprites.webp';
     window.addEventListener('pibase:thibodeaux-mission', function (event) {
