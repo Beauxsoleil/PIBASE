@@ -9,6 +9,8 @@
   window.__PIBASE_THIBODEAUX_KIOSK__ = true;
   var key = 'pibase-thibodeaux-kiosk-visible-v1';
   var hidden = false, frame = -1, tickCount = 0, until = 0, pose = 'idle';
+  var mission = { month: '', target: 0, confirmed: 0 };
+  var lastStatus = '';
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var poses = {
     idle: [0], talk: [1, 0], think: [2], work: [3, 4],
@@ -38,6 +40,35 @@
     until = Date.now() + (ms || 2200);
     tickCount = 0;
     if (!reduced) setFrame(poses[name][0]);
+  }
+  function currentMonth() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  }
+  function rivalryStatus() {
+    if (mission.month !== currentMonth() || mission.target <= 0) return 'unconfigured';
+    if (mission.confirmed >= mission.target) return 'achieved';
+    var d = new Date();
+    var days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    var urgency = Math.min(1, (Math.max(0, mission.target - mission.confirmed) / mission.target) *
+      (0.35 + 0.65 * d.getDate() / days));
+    return urgency >= 0.65 ? 'risk' : urgency >= 0.35 ? 'close' : 'track';
+  }
+  function updateRivalry() {
+    var status = rivalryStatus();
+    var host = document.getElementById('thibodeauxKiosk');
+    if (!host) return;
+    // Keep Thibodeaux on the left side of the display. Only change position
+    // on mission updates or calendar changes; never animate CSS layout per tick.
+    var shift = status === 'risk' ? 22 : status === 'close' ? 12 : 0;
+    host.style.left = 'calc(18px + ' + shift + 'vw)';
+    if (lastStatus && lastStatus !== status) {
+      if (status === 'achieved') {
+        play('think', 2600);
+        if (window.Boudreaux && window.Boudreaux.play) window.Boudreaux.play('celebrate', 2600);
+      } else if (status === 'risk') play('sneak', 2400);
+    }
+    lastStatus = status;
   }
   function init() {
     if (document.getElementById('thibodeauxKiosk')) return;
@@ -70,6 +101,12 @@
     var probe = new Image();
     probe.onerror = function () { host.hidden = true; button.hidden = true; };
     probe.src = './assets/thibideaux-sprites.webp';
+    window.addEventListener('pibase:thibodeaux-mission', function (event) {
+      var data = event.detail || {};
+      mission = { month: String(data.month || ''), target: Math.max(0, Number(data.target) || 0),
+        confirmed: Math.max(0, Number(data.confirmed) || 0) };
+      updateRivalry();
+    });
     window.addEventListener('pibase:screen-change', function () { play('point', 1800); });
     window.addEventListener('offline', function () { play('think', 2400); });
     window.addEventListener('online', function () { play('hat', 1800); });
@@ -83,6 +120,7 @@
       var sequence = poses[pose];
       setFrame(sequence[tickCount % sequence.length]);
     }, 750);
+    window.setInterval(updateRivalry, 60000);
     window.ThibodeauxKiosk = {
       play: play,
       hide: function () { setVisible(false); },
