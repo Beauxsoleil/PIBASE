@@ -21,6 +21,9 @@
     if (host) host.hidden = hidden;
     var restore = document.getElementById('boudreauxRestore');
     if (restore) restore.hidden = !hidden;
+    restore.textContent = 'Show Boudreaux';
+    var hideButton = document.getElementById('boudreauxHide');
+    if (hideButton) hideButton.hidden = hidden;
     try { localStorage.setItem(preferenceKey, hidden ? 'hidden' : 'visible'); } catch (e) {}
   }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -48,7 +51,9 @@
     style.textContent = '\
       #boudreauxCompanion{position:fixed;right:24px;bottom:55px;z-index:15;width:172px;max-width:25vw;text-align:center;pointer-events:none;user-select:none;opacity:.98}\
       #boudreauxCompanion[hidden]{display:none!important}\
-      #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;filter:drop-shadow(0 5px 10px rgba(0,0,0,.25))}\
+      #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;image-rendering:auto}\
+      #boudreauxHide{position:fixed;right:12px;bottom:12px;z-index:16;background:rgba(23,35,31,.92);color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
+      #boudreauxHide[hidden]{display:none!important}\
       #boudreauxRestore{position:fixed;right:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
       #boudreauxRestore[hidden]{display:none!important}\
       @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}}\
@@ -65,11 +70,15 @@
     restore.id = 'boudreauxRestore'; restore.type = 'button'; restore.textContent = 'Show Boudreaux';
     restore.addEventListener('click', function () { setHidden(false); });
     document.body.appendChild(restore);
+    var hideButton = document.createElement('button');
+    hideButton.id = 'boudreauxHide'; hideButton.type = 'button'; hideButton.textContent = 'Hide Boudreaux';
+    hideButton.addEventListener('click', function () { setHidden(true); });
+    document.body.appendChild(hideButton);
     setHidden(hidden);
     setFrame(0);
     // Optional graceful failure if assets were not uploaded with the JavaScript.
     var probe = new Image();
-    probe.onerror = function () { host.hidden = true; };
+    probe.onerror = function () { host.hidden = true; hideButton.hidden = true; restore.hidden = true; };
     probe.src = sheetUrl;
     document.addEventListener('keydown', function (event) {
       if (event.altKey && (event.key === 'b' || event.key === 'B')) {
@@ -97,7 +106,8 @@
     });
     window.addEventListener('offline', function () { play('think', 4000); });
     window.addEventListener('online', function () { play('wave', 2500); });
-    window.setInterval(tick, 450);
+    // Keep a low fixed animation cadence for the Raspberry Pi 2 CPU/GPU.
+    window.setInterval(tick, 650);
     window.Boudreaux = { play: play, hide: function () { setHidden(true); }, show: function () { setHidden(false); } }; // Optional read-only demo or future integrations.
   }
 
