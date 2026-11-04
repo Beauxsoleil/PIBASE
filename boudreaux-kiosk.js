@@ -25,6 +25,7 @@
     var hideButton = document.getElementById('boudreauxHide');
     if (hideButton) hideButton.hidden = hidden;
     try { localStorage.setItem(preferenceKey, hidden ? 'hidden' : 'visible'); } catch (e) {}
+    positionControls();
   }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lastInteraction = Date.now();
@@ -121,6 +122,8 @@
     window.addEventListener('online', function () { play('talk', 2500); });
     // Keep a low fixed animation cadence for the Raspberry Pi 2 CPU/GPU.
     window.setInterval(tick, 650);
+    window.addEventListener('resize', positionControls);
+    positionControls();
     window.Boudreaux = { play: play, hide: function () { setHidden(true); }, show: function () { setHidden(false); } }; // Optional read-only demo or future integrations.
   }
 
@@ -154,8 +157,21 @@
       play('working', 2500);
     }
     latestDueCount = due;
+    positionControls();
   }
 
+  function positionControls() {
+    var host = document.getElementById('boudreauxCompanion');
+    var button = document.getElementById(hidden ? 'boudreauxRestore' : 'boudreauxHide');
+    if (!host || !button) return;
+    var rect = host.getBoundingClientRect();
+    var badge = document.getElementById('boudreauxStatus');
+    var badgeHeight = !hidden && badge && !badge.hidden ? badge.offsetHeight + 5 : 0;
+    var top = Math.max(6, rect.top - badgeHeight - button.offsetHeight - 7);
+    button.style.top = top + 'px';
+    button.style.bottom = 'auto';
+    button.style.right = Math.max(6, (window.innerWidth || 1024) - rect.right) + 'px';
+  }
   function setFrame(index) {
     if (index === frameIndex) return;
     frameIndex = index;
