@@ -15,6 +15,7 @@ const APP_SHELL = [
   'appointment-reminder.js',
   'kiosk-runtime.js',
   'assets/boudreaux-sprites.webp',
+  'assets/thibideaux-sprites.webp',
   'boudreaux-kiosk.js',
   'boudreaux-mobile.js',
   'thibideaux-mobile.js',
