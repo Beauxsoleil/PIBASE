@@ -27,7 +27,7 @@
     var host = document.getElementById('thibodeauxKiosk');
     var toggle = document.getElementById('thibodeauxKioskToggle');
     if (host) host.hidden = hidden || !assetReady;
-    if (toggle) toggle.textContent = hidden ? 'Show Thibodeaux' : 'Hide Thibodeaux';
+    if (toggle) { toggle.textContent = hidden ? 'Show Thibodeaux' : 'Hide'; toggle.setAttribute('aria-label', hidden ? 'Show Thibodeaux' : 'Hide Thibodeaux'); }
     if (hidden) { pose = 'idle'; until = 0; }
     try { localStorage.setItem(key, hidden ? 'hidden' : 'visible'); } catch (e) {}
   }
@@ -62,6 +62,12 @@
     var status = rivalryStatus();
     var host = document.getElementById('thibodeauxKiosk');
     if (!host) return;
+    var badge = document.getElementById('thibodeauxKioskMission');
+    if (badge) {
+      badge.hidden = status === 'unconfigured';
+      badge.textContent = status === 'achieved' ? 'GOAL MET' :
+        status === 'unconfigured' ? '' : Math.max(0, mission.target - mission.confirmed) + ' TO GO';
+    }
     // Keep Thibodeaux on the left side of the display. Only change position
     // on mission updates or calendar changes; never animate CSS layout per tick.
     var shift = status === 'risk' ? 22 : status === 'close' ? 12 : 0;
@@ -91,6 +97,8 @@
     style.textContent =
       '#thibodeauxKiosk{position:fixed;left:18px;bottom:54px;width:144px;height:144px;z-index:15;pointer-events:none;user-select:none}' +
       '#thibodeauxKiosk[hidden]{display:none!important}' +
+      '#thibodeauxKioskMission{position:absolute;left:0;bottom:100%;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:4px;padding:4px 6px;font:11px monospace;white-space:nowrap}' +
+      '#thibodeauxKioskMission[hidden]{display:none!important}' +
       '#thibodeauxKioskSprite{width:100%;height:100%;background-image:url("./assets/thibideaux-sprites.webp");background-size:400% 300%;background-repeat:no-repeat}' +
       '#thibodeauxKioskToggle{position:fixed;left:8px;bottom:125px;z-index:40;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:6px 8px;font:11px monospace;cursor:pointer}' +
       '@media(max-width:1100px){#thibodeauxKiosk{width:100px;height:100px;left:10px;bottom:45px}}' +
@@ -105,6 +113,9 @@
     var sprite = document.createElement('div');
     sprite.id = 'thibodeauxKioskSprite';
     host.appendChild(sprite);
+    var badge = document.createElement('div');
+    badge.id = 'thibodeauxKioskMission'; badge.hidden = true;
+    host.appendChild(badge);
     document.body.appendChild(host);
     var button = document.createElement('button');
     button.id = 'thibodeauxKioskToggle';
@@ -112,6 +123,7 @@
     button.addEventListener('click', function () { setVisible(hidden); });
     document.body.appendChild(button);
     setFrame(0);
+    host.hidden = true;
     var probe = new Image();
     probe.onload = function () { assetReady = true; setVisible(!hidden); };
     probe.onerror = function () { assetReady = false; host.hidden = true; button.hidden = true; };
