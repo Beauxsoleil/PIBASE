@@ -82,6 +82,24 @@
   .save-bar .btn { flex:1; margin-top:0; }
   #saveStatus { font-size:.75rem; color:var(--teal); text-align:center; margin-top:8px; min-height:1em; }
   .hidden { display:none !important; }
+
+  /* Compact mission accordions and consistent iPhone field alignment */
+  .mission-accordion{padding:0;overflow:hidden}
+  .mission-details+.mission-details{border-top:1px solid var(--line)}
+  .mission-toggle{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:66px;padding:14px 16px;cursor:pointer;color:var(--text)}
+  .mission-toggle::-webkit-details-marker{display:none}
+  .mission-toggle strong{display:block;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.055em;text-transform:uppercase}
+  .mission-toggle small{display:block;color:var(--text-muted);font-size:.72rem;margin-top:5px}
+  .mission-chevron{font-size:1.4rem;transition:transform .18s}
+  .mission-details[open] .mission-chevron{transform:rotate(180deg)}
+  .mission-details-body{padding:0 16px 16px}
+  .mission-details-body .field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end}
+  .mission-details-body .field-row>div{min-width:0}
+  .mission-details-body .field-row label{display:block;min-height:2.4em;margin:0 0 6px;line-height:1.2}
+  .mission-details-body .field-row input{width:100%;min-width:0;box-sizing:border-box;min-height:44px}
+  .mission-details-body .monthly-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mission-details-body .mission-save{flex-wrap:wrap}
+  @media(max-width:460px){.mission-details-body .monthly-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.mission-details-body .monthly-fields>div:first-child{grid-column:1/-1}.mission-details-body .field-row label{min-height:0}}
 </style>
 </head>
 <body>
@@ -97,14 +115,22 @@
 
 <div id="listScreen" class="wrap hidden">
   <header class="top"><h1 id="applicantListTitle">Applicants</h1><button id="signOutBtn">Sign out</button></header>
-  <div class="mission-card">
-    <div class="mission-title">Recruiting mission</div>
+  <div class="mission-card mission-accordion">
+    <details class="mission-details">
+      <summary class="mission-toggle"><span><strong>Recruiting mission</strong><small>Fiscal-year goal and kiosk settings</small></span><span class="mission-chevron">⌄</span></summary>
+      <div class="mission-details-body">    <div class="mission-title">Recruiting mission</div>
     <div class="field-row">
       <div><label for="missionFiscalYear">Fiscal year</label><input type="number" id="missionFiscalYear" min="2020" max="2100"></div>
       <div><label for="missionTarget">Mission target</label><input type="number" id="missionTarget" min="0" step="1" placeholder="e.g. 18"></div>
     </div>
     <div class="helper">Used by the kiosk Pipeline / Mission screen. The enlisted count comes from current PIBASE records.</div>
-    <div class="mission-save"><button class="btn btn-secondary" id="saveMissionBtn" type="button">Save mission</button><div id="missionStatus"></div></div><div class="mission-title" style="margin-top:16px">Thibideaux · Monthly mission</div><div class="field-row"><div><label for="monthlyMissionMonth">Month</label><input type="month" id="monthlyMissionMonth"></div><div><label for="monthlyMissionTarget">Enlistment goal</label><input type="number" min="0" step="1" id="monthlyMissionTarget"></div><div><label for="monthlyMissionConfirmed">Confirmed enlistments</label><input type="number" min="0" step="1" id="monthlyMissionConfirmed"></div></div><div class="helper">Enter confirmed enlistments manually. Applicant stages are not treated as enlistments. Set a new goal each month.</div><div class="mission-save"><button class="btn btn-secondary" id="saveMonthlyMissionBtn" type="button">Save monthly mission</button><div id="monthlyMissionStatus"></div></div>
+    <div class="mission-save"><button class="btn btn-secondary" id="saveMissionBtn" type="button">Save mission</button><div id="missionStatus"></div></div></div>
+    </details>
+    <details class="mission-details" id="monthlyMissionDetails">
+      <summary class="mission-toggle"><span><strong>Thibideaux · Monthly mission</strong><small>Track confirmed enlistments and monthly progress</small></span><span class="mission-chevron">⌄</span></summary>
+      <div class="mission-details-body"><div class="monthly-mission-grid"><div class="field-row monthly-fields"><div><label for="monthlyMissionMonth">Month</label><input type="month" id="monthlyMissionMonth"></div><div><label for="monthlyMissionTarget">Enlistment goal</label><input type="number" min="0" step="1" id="monthlyMissionTarget"></div><div><label for="monthlyMissionConfirmed">Confirmed enlistments</label><input type="number" min="0" step="1" id="monthlyMissionConfirmed"></div></div></div><div class="helper">Enter confirmed enlistments manually. Applicant stages are not treated as enlistments. Set a new goal each month.</div><div class="mission-save"><button class="btn btn-secondary" id="saveMonthlyMissionBtn" type="button">Save monthly mission</button><div id="monthlyMissionStatus"></div></div>
+</div>
+    </details>
   </div>
   <nav class="folder-nav" id="folderNav" aria-label="Applicant folders">
     <button type="button" class="folder-btn active" data-folder="active"><span class="folder-name">Active</span><span class="folder-count" id="activeCount">0</span></button>
