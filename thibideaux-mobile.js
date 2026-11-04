@@ -32,16 +32,16 @@ function calc(){
  * 8 celebrate  9 think  10 taunt  11 sleep */
 var poses={
   idle:[0,0,0,0,1,0],
-  walk:[4,5,4,5],
-  sneak:[4,5],
-  taunt:[6,6,10,6,10,6],
-  think:[9,9,7,9,7,9],
-  celebrate:[8,8,2,8,2,8],
-  sleep:[11,11,11,11],
-  react:[2,2,0,2,0],
-  salute:[3,0,3,0],
-  catch:[2,6,8,8,8,0],
-  defeat:[10,9,10,11,11,0]
+  walk:[2,3,2,3],
+  sneak:[1,2,3,4,2,3],
+  taunt:[5,5,1,5],
+  think:[0,1,0,1],
+  celebrate:[8,8,5,8],
+  sleep:[0,0,0,0],
+  react:[9,9,10,9],
+  salute:[0,0],
+  catch:[6,7,8,8,8,8],
+  defeat:[9,10,11,11,11,11]
 };
 var current='idle',until=0,ticks=0,lastActivity=Date.now(),panelOpen=false;
 var lastStatus='',lastConfirmed=null,achievedAt=0,assetReady=false;
