@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v16';
+const CACHE_NAME = 'pibase-app-v17';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -17,6 +17,7 @@ const APP_SHELL = [
   'assets/boudreaux-sprites.webp',
   'assets/thibideaux-sprites.webp',
   'boudreaux-kiosk.js',
+  'thibodeaux-kiosk.js',
   'boudreaux-mobile.js',
   'thibideaux-mobile.js',
   'assets/thibideaux.svg',
