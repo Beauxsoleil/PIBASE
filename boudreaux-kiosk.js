@@ -12,7 +12,17 @@
   var sheetUrl = './assets/boudreaux-sprites.webp';
   var CELL = 362;
   var cols = 4;
+  var preferenceKey = 'pibase-boudreaux-kiosk-visible-v1';
   var hidden = false;
+  try { hidden = localStorage.getItem(preferenceKey) === 'hidden'; } catch (e) {}
+  function setHidden(value) {
+    hidden = !!value;
+    var host = document.getElementById('boudreauxCompanion');
+    if (host) host.hidden = hidden;
+    var restore = document.getElementById('boudreauxRestore');
+    if (restore) restore.hidden = !hidden;
+    try { localStorage.setItem(preferenceKey, hidden ? 'hidden' : 'visible'); } catch (e) {}
+  }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lastInteraction = Date.now();
   var animation = null;
@@ -39,8 +49,9 @@
       #boudreauxCompanion{position:fixed;right:24px;bottom:55px;z-index:15;width:172px;max-width:25vw;text-align:center;pointer-events:none;user-select:none;opacity:.98}\
       #boudreauxCompanion[hidden]{display:none!important}\
       #boudreauxSprite{width:162px;height:162px;max-width:100%;margin:0 auto;background-repeat:no-repeat;background-image:url("'+sheetUrl+'");background-size:400% 300%;filter:drop-shadow(0 5px 10px rgba(0,0,0,.25))}\
-      #boudreauxLabel{display:inline-block;margin-top:-4px;padding:3px 9px;border:1px solid var(--brass-dim,#826b3c);border-radius:4px;background:rgba(13,18,16,.92);color:var(--brass,#c6a15b);font:600 10px/1.4 monospace;letter-spacing:.09em}\
-      @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}#boudreauxLabel{font-size:9px}}\
+      #boudreauxRestore{position:fixed;right:12px;bottom:12px;z-index:16;background:#17231f;color:#e4c47c;border:1px solid #826b3c;border-radius:5px;padding:7px 10px;font:12px monospace;cursor:pointer}\
+      #boudreauxRestore[hidden]{display:none!important}\
+      @media(max-width:1100px){#boudreauxCompanion{right:12px;bottom:48px;width:116px}#boudreauxSprite{width:108px;height:108px}}\
       @media(max-width:700px){#boudreauxCompanion{display:none!important}}\
       @media print{#boudreauxCompanion{display:none!important}}';
     document.head.appendChild(style);
@@ -48,9 +59,13 @@
     host.id = 'boudreauxCompanion';
     host.setAttribute('aria-hidden', 'true');
     var sprite = document.createElement('div'); sprite.id = 'boudreauxSprite';
-    var label = document.createElement('div'); label.id = 'boudreauxLabel'; label.textContent = 'BOUDREAUX';
-    host.appendChild(sprite); host.appendChild(label);
+    host.appendChild(sprite);
     document.body.appendChild(host);
+    var restore = document.createElement('button');
+    restore.id = 'boudreauxRestore'; restore.type = 'button'; restore.textContent = 'Show Boudreaux';
+    restore.addEventListener('click', function () { setHidden(false); });
+    document.body.appendChild(restore);
+    setHidden(hidden);
     setFrame(0);
     // Optional graceful failure if assets were not uploaded with the JavaScript.
     var probe = new Image();
@@ -58,7 +73,7 @@
     probe.src = sheetUrl;
     document.addEventListener('keydown', function (event) {
       if (event.altKey && (event.key === 'b' || event.key === 'B')) {
-        hidden = !hidden; host.hidden = hidden; return;
+        setHidden(!hidden); return;
       }
       if (event.key && event.key.indexOf('Arrow') === 0) {
         lastInteraction = Date.now(); play('point', 1900);
@@ -83,7 +98,7 @@
     window.addEventListener('offline', function () { play('think', 4000); });
     window.addEventListener('online', function () { play('wave', 2500); });
     window.setInterval(tick, 450);
-    window.Boudreaux = { play: play }; // Optional read-only demo or future integrations.
+    window.Boudreaux = { play: play, hide: function () { setHidden(true); }, show: function () { setHidden(false); } }; // Optional read-only demo or future integrations.
   }
 
   function setFrame(index) {
