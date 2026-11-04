@@ -15,11 +15,16 @@
   var lastMonth = '';
   var lastTarget = 0;
   var assetReady = false;
+  var snapshotKey = 'pibase-thibodeaux-kiosk-last-month-v1';
+  var finaleKey = 'pibase-thibodeaux-kiosk-finale-v1';
+  var prior = null;
+  try { prior = JSON.parse(localStorage.getItem(snapshotKey) || 'null'); } catch (e) {}
+  var finaleTimer = 0;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var poses = {
     idle: [0], talk: [1, 0], think: [2], work: [3, 4],
     hat: [5, 0], laugh: [6, 0], point: [7, 0],
-    sneak: [8, 9], run: [9, 8], win: [10, 0], sleep: [11]
+    sneak: [8, 9], run: [9, 8], win: [10, 6, 10], defeat: [5, 9, 11], catch: [10, 6, 10, 6], sleep: [11]
   };
   try { hidden = localStorage.getItem(key) === 'hidden'; } catch (e) {}
   function setVisible(show) {
@@ -59,7 +64,41 @@
       (0.35 + 0.65 * d.getDate() / days));
     return urgency >= 0.65 ? 'risk' : urgency >= 0.35 ? 'close' : 'track';
   }
+  function saveSnapshot() {
+    if (mission.month !== currentMonth() || mission.target <= 0) return;
+    prior = {month:mission.month, target:mission.target, confirmed:mission.confirmed};
+    try { localStorage.setItem(snapshotKey, JSON.stringify(prior)); } catch (e) {}
+  }
+  function previousMonth() {
+    var d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  }
+  function playFinale(kind, month) {
+    var identity = month + ':' + kind;
+    try {
+      if (localStorage.getItem(finaleKey) === identity) return;
+      localStorage.setItem(finaleKey, identity);
+    } catch (e) {}
+    if (hidden || reduced || !assetReady) return;
+    play(kind === 'catch' ? 'catch' : 'defeat', 4200);
+    if (window.Boudreaux && window.Boudreaux.play)
+      window.Boudreaux.play(kind === 'catch' ? 'think' : 'celebrate', 4200);
+    if (finaleTimer) window.clearTimeout(finaleTimer);
+    finaleTimer = window.setTimeout(function () { finaleTimer = 0; }, 4200);
+  }
+  function checkMonthEnd() {
+    if (!prior || !/^\\d{4}-\\d{2}$/.test(prior.month)) return;
+    if (prior.month === currentMonth()) return;
+    // Only close the immediately preceding month; older saved state is stale.
+    if (prior.month === previousMonth() && prior.target > 0)
+      playFinale(prior.confirmed >= prior.target ? 'win' : 'catch', prior.month);
+    prior = null;
+    try { localStorage.removeItem(snapshotKey); } catch (e) {}
+  }
   function updateRivalry() {
+    checkMonthEnd();
     var status = rivalryStatus();
     var host = document.getElementById('thibodeauxKiosk');
     if (!host) return;
@@ -92,6 +131,7 @@
     lastMonth = mission.month;
     lastTarget = mission.target;
     lastStatus = status;
+    saveSnapshot();
   }
   function positionToggle() {
     var host = document.getElementById('thibodeauxKiosk');
@@ -157,6 +197,7 @@
       }
     });
     window.addEventListener('resize', updateRivalry);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) updateRivalry(); });
     updateRivalry();
     window.addEventListener('pibase:screen-change', function () { play('point', 1800); });
     window.addEventListener('offline', function () { play('think', 2400); });
