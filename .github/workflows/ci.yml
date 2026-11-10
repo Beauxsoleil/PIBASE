@@ -47,6 +47,8 @@ jobs:
       - name: Verify installable PWA shell
         run: node scripts/pwa-smoke.mjs
 
+      - name: Verify Stripes for Skills generator
+        run: node scripts/sfs-smoke.mjs
 
       - name: Verify daily appointment reminder
         run: node scripts/appointment-reminder-smoke.mjs
