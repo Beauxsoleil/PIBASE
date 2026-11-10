@@ -127,7 +127,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
+  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|stripes-for-skills\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request).catch(() => caches.match(scopeUrl('offline.html'))));
     return;
