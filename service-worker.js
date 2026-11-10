@@ -10,7 +10,8 @@ const APP_SHELL = [
   'manifest.webmanifest',
   'styles.css',
   'firebase-config.js',
-  'pibase-util.js',\n  'stripes-for-skills.js',
+  'pibase-util.js',
+  'stripes-for-skills.js',
   'events-ui.js',
   'appointment-reminder.js',
   'kiosk-runtime.js',
@@ -30,7 +31,9 @@ const APP_SHELL = [
   'icons/pibase-maskable-512.png'
 ].map(scopeUrl);
 
-const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';\n\nconst FIREBASE_SDK = [
+const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+
+const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'
