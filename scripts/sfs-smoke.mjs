@@ -50,15 +50,24 @@ assert.ok(!api.officialWhiteFields.includes('InitialsDate of CompletionMilitary 
 assert.ok(api.officialRedFields.includes('InitialsDate of CompletionColumn Left STRM White Phase'));
 assert.ok(api.officialRedFields.includes('InitialsDate of CompletionColumn Right STRM White Phase'));
 
+assert.strictEqual(api.templateStorageKey, 'pibase.sfs.officialTemplate.v1');
+assert.ok(api.expectedTemplateFields.includes('Date'));
+assert.ok(api.expectedTemplateFields.includes('NAME  RANK'));
+assert.ok(api.expectedTemplateFields.includes('PLATOON SGTUNIT'));
+assert.ok(api.expectedTemplateFields.length >= 50);
+
 const index = await readFile(join(root, 'index.html'), 'utf8');
 assert.match(index, /<script defer src="\.\/stripes-for-skills\.js"><\/script>/);
 const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
 assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
-assert.match(worker, /pibase-app-v29/);
+assert.match(worker, /pibase-app-v30/);
 
-assert.doesNotMatch(source, /page\.drawRectangle/);
-assert.match(source, /drawLine\(page, left, bottom, right, bottom, 0\.65\)/);
-assert.match(source, /drawLine\(page, left, top, right, top, 0\.65\)/);
+assert.match(source, /validateTemplate/);
+assert.match(source, /form\.updateFieldAppearances\(font\)/);
+assert.match(source, /form\.flatten\(\)/);
+assert.match(source, /localStorage\.setItem\(TEMPLATE_STORAGE_KEY/);
+assert.doesNotMatch(source, /makeFallbackPdf/);
+assert.doesNotMatch(source, /PDFDocument\.create\(/);
 assert.doesNotMatch(source, /\b(?:updateDoc|addDoc|setDoc)\b/);
 console.log('Stripes for Skills smoke OK');
