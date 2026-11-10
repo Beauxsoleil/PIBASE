@@ -1,0 +1,41 @@
+name: Import Stripes for Skills template
+
+on:
+  push:
+    branches:
+      - improve/bundle-sfs-template
+
+permissions:
+  contents: write
+
+jobs:
+  import-template:
+    if: ${{ !contains(github.event.head_commit.message, '[sfs-template-imported]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: improve/bundle-sfs-template
+          fetch-depth: 0
+
+      - name: Download and verify official blank form
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          curl --fail --location --retry 3 \
+            'https://sdmntpreastus3.oaiusercontent.com/files/00000000-bda4-8212-89e2-b6a668a7e85e/raw?se=2026-11-10T22%3A11%3A06Z&sp=r&sv=2026-02-06&sr=b&scid=468ed27e-1909-592a-b75b-e42595702109&skoid=6174e06a-818a-4ff5-b6f0-d683c3377d0a&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-11-10T15%3A15%3A23Z&ske=2026-11-11T15%3A15%3A23Z&sks=b&skv=2026-02-06&sig=KppkwxA9bHvw3dMb7QRrioDHc4I4IJDjBvZ/nlb6FHg%3D' \
+            --output assets/stripes-for-skills-template.pdf
+          echo 'd36313fff84e46f5e0fc2d1810df9c6668a273c14f0aaa87fb511ed7e0dfec46  assets/stripes-for-skills-template.pdf' | sha256sum --check
+          test "$(stat -c%s assets/stripes-for-skills-template.pdf)" -eq 413627
+
+      - name: Commit template and remove one-time importer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/stripes-for-skills-template.pdf
+          git rm .github/workflows/import-sfs-template.yml
+          git commit -m "Bundle official Stripes for Skills template [sfs-template-imported]"
+          git push origin HEAD:improve/bundle-sfs-template
