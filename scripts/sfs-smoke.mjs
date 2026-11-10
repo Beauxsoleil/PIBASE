@@ -55,7 +55,7 @@ assert.match(index, /<script defer src="\.\/stripes-for-skills\.js"><\/script>/)
 const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
 assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
-assert.match(worker, /pibase-app-v28/);
+assert.match(worker, /pibase-app-v29/);
 
 assert.doesNotMatch(source, /page\.drawRectangle/);
 assert.match(source, /drawLine\(page, left, bottom, right, bottom, 0\.65\)/);
