@@ -249,7 +249,12 @@
 
     var left = 50, right = 562, split = 397.8;
     var top = 738, bottom = 72;
-    page.drawRectangle({ x: left, y: bottom, width: right - left, height: top - bottom, borderWidth: 0.65 });
+    // Draw the form border as four strokes. pdf-lib fills rectangles black by
+    // default when only borderWidth is supplied, which hid the entire checklist.
+    drawLine(page, left, bottom, right, bottom, 0.65);
+    drawLine(page, left, top, right, top, 0.65);
+    drawLine(page, left, bottom, left, top, 0.65);
+    drawLine(page, right, bottom, right, top, 0.65);
 
     drawLine(page, left, 696, right, 696, 0.55);
     drawLine(page, left, 676, right, 676, 0.55);
