@@ -247,8 +247,9 @@
     var redStamp = stamp(options.redDate);
     var whiteStamp = stamp(options.whiteDate);
 
-    var left = 50, right = 562, split = 397.8;
-    var top = 738, bottom = 72;
+    var left = 51, right = 511.8, split = 397.2;
+    var completionLeft = 397.8, completionRight = 510.96;
+    var top = 738.12, bottom = 72.24;
     // Draw the form border as four strokes. pdf-lib fills rectangles black by
     // default when only borderWidth is supplied, which hid the entire checklist.
     drawLine(page, left, bottom, right, bottom, 0.65);
@@ -256,27 +257,27 @@
     drawLine(page, left, bottom, left, top, 0.65);
     drawLine(page, right, bottom, right, top, 0.65);
 
-    drawLine(page, left, 696, right, 696, 0.55);
-    drawLine(page, left, 676, right, 676, 0.55);
-    drawLine(page, 264, 676, 264, 696, 0.55);
-    drawLine(page, left, 666.6, right, 666.6, 0.55);
-    drawLine(page, split, 132.4, split, 676, 0.55);
+    drawLine(page, left, 697.8, right, 697.8, 0.55);
+    drawLine(page, left, 677.64, right, 677.64, 0.55);
+    drawLine(page, 195.36, 677.64, 195.36, 697.8, 0.55);
+    drawLine(page, left, 667.56, right, 667.56, 0.55);
+    drawLine(page, split, 132.36, split, 677.64, 0.55);
 
     drawCellText(page, 'ARMY NATIONAL GUARD', bold, 8.2, left, right, 725);
     drawCellText(page, 'STRIPES FOR SKILLS PROGRAM', bold, 8.2, left, right, 712);
-    page.drawText('Date:', { x: 480, y: 700, size: 6.7, font: regular });
-    page.drawText(todayYmd(), { x: 508, y: 700, size: 6.7, font: mono });
-    drawLine(page, 505, 698, 535, 698, 0.4);
+    page.drawText('Date:', { x: 436.4, y: 701.2, size: 7.0, font: regular });
+    page.drawText(todayYmd(), { x: 455.5, y: 702.0, size: 5.25, font: regular });
+    drawLine(page, 453.5, 699.4, 480.7, 699.4, 0.4);
 
-    page.drawText('NAME & RANK:', { x: 51, y: 683, size: 6.7, font: bold });
-    page.drawText('PLATOON SGT/UNIT:', { x: 265, y: 683, size: 6.7, font: bold });
-    page.drawText(soldier, { x: 105, y: 683, size: fitText(regular, soldier, 150, 7, 5.4), font: regular });
-    page.drawText(RECRUITER_LINE, { x: 333, y: 683, size: 6.8, font: regular });
+    page.drawText('NAME & RANK:', { x: 52.1, y: 685.2, size: 7.0, font: bold });
+    page.drawText('PLATOON SGT/UNIT:', { x: 197.1, y: 685.2, size: 7.0, font: bold });
+    page.drawText(soldier, { x: 103.9, y: 682.7, size: fitText(regular, soldier, 89, 7.5, 5.5), font: regular });
+    page.drawText(RECRUITER_LINE, { x: 266.4, y: 681.6, size: fitText(regular, RECRUITER_LINE, 142, 12.47, 8), font: regular });
 
-    page.drawText('Required Task:', { x: 51, y: 668.6, size: 6.7, font: bold });
-    page.drawText('Initials/Date of Completion:', { x: 399.5, y: 668.6, size: 6.7, font: bold });
+    page.drawText('Required Task:', { x: 52.1, y: 669.6, size: 7.0, font: bold });
+    page.drawText('Initials/Date of Completion:', { x: 398.6, y: 669.6, size: 7.0, font: bold });
 
-    var yTop = 666.6;
+    var yTop = 667.56;
     var row = 10.08;
     TASKS.forEach(function (task, index) {
       var rowBottom = yTop - row;
@@ -488,8 +489,9 @@
         '<label for="sfsSoldierName">Soldier name</label><input id="sfsSoldierName" type="text" autocomplete="off">' +
         '<div class="field-row"><div><label for="sfsRedDate">Red Phase date</label><input id="sfsRedDate" type="date"></div><div><label for="sfsWhiteDate">White Phase date</label><input id="sfsWhiteDate" type="date"></div></div>' +
         '<div class="sfs-stamp"><div>Red: <span id="sfsRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsWhitePreview">JV/________</span></div><div style="margin-top:4px;color:var(--text-muted)">Recruiter: ' + RECRUITER_LINE + '</div></div>' +
-        '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate / Share PDF</button></div>' +
+        '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate PDF</button></div>' +
         '<div class="sfs-status" id="sfsStatus"></div>' +
+        '<div class="sfs-result-actions hidden" id="sfsResultActions"><a class="btn btn-secondary" id="sfsPreviewBtn" target="_blank" rel="noopener">Preview PDF</a><button class="btn btn-primary" id="sfsShareBtn" type="button">Share / Save</button></div>' +
       '</div>';
     document.body.appendChild(modal);
 
@@ -535,9 +537,8 @@
       button.disabled = true;
       try {
         var bytes = await makePdf({ rank: rank, name: name, redDate: redDate, whiteDate: whiteDate });
-        var result = await shareOrDownload(bytes, name);
-        if (result === 'cancelled') status.textContent = 'PDF created. Share cancelled.';
-        else status.textContent = result === 'shared' ? 'PDF created and shared.' : 'PDF created.';
+        storeGeneratedPdf(bytes, name);
+        status.textContent = 'PDF ready. Preview it before sharing or saving.';
       } catch (err) {
         console.error('Stripes for Skills generation failed', err);
         status.style.color = '#E08B77';
@@ -546,6 +547,15 @@
         button.disabled = false;
       }
     });
+
+    document.getElementById('sfsShareBtn').addEventListener('click', async function () {
+      if (!generatedPdf) return;
+      var status = document.getElementById('sfsStatus');
+      var result = await shareOrDownload(generatedPdf.bytes, generatedPdf.name);
+      if (result === 'cancelled') status.textContent = 'PDF ready. Share cancelled.';
+      else status.textContent = result === 'shared' ? 'PDF shared.' : 'PDF saved/downloaded.';
+    });
+
     return modal;
   }
 
@@ -560,6 +570,7 @@
     document.getElementById('sfsRedPreview').textContent = 'JV/________';
     document.getElementById('sfsWhitePreview').textContent = 'JV/________';
     document.getElementById('sfsStatus').textContent = '';
+    clearGeneratedPdf();
     modal.classList.remove('hidden');
     setTimeout(function () { document.getElementById('sfsRedDate').focus(); }, 0);
   }
