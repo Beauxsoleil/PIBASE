@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v30';
+const CACHE_NAME = 'pibase-app-v31';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -17,6 +17,7 @@ const APP_SHELL = [
   'kiosk-runtime.js',
   'assets/boudreaux-sprites.webp',
   'assets/thibideaux-sprites.webp',
+  'assets/stripes-for-skills-template.pdf',
   'boudreaux-kiosk.js',
   'thibodeaux-kiosk.js',
   'boudreaux-mobile.js',
@@ -138,7 +139,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (/\.(?:css|png|webp|svg|ico)$/.test(url.pathname)) {
+  if (/\.(?:css|png|webp|svg|ico|pdf)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });

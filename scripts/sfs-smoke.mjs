@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const source = await readFile(join(root, 'stripes-for-skills.js'), 'utf8');
@@ -61,7 +62,15 @@ assert.match(index, /<script defer src="\.\/stripes-for-skills\.js"><\/script>/)
 const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
 assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
-assert.match(worker, /pibase-app-v30/);
+assert.match(worker, /pibase-app-v31/);
+assert.ok(worker.includes("'assets/stripes-for-skills-template.pdf'"));
+
+const template = await readFile(join(root, 'assets', 'stripes-for-skills-template.pdf'));
+assert.strictEqual(template.length, 413627);
+assert.strictEqual(
+  createHash('sha256').update(template).digest('hex'),
+  'd36313fff84e46f5e0fc2d1810df9c6668a273c14f0aaa87fb511ed7e0dfec46'
+);
 
 assert.match(source, /validateTemplate/);
 assert.match(source, /form\.updateFieldAppearances\(font\)/);
