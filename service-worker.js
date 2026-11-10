@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v26';
+const CACHE_NAME = 'pibase-app-v27';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
