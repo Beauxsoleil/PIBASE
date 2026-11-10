@@ -12,7 +12,8 @@
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
   var RANKS = ['PVT', 'PV2', 'PFC', 'SPC', 'CPL', 'SGT', 'SSG', 'SFC', 'MSG', '1SG', 'SGM', 'CSM'];
-  var pdfLibPromise = null;\n  var generatedPdf = null;
+  var pdfLibPromise = null;
+  var generatedPdf = null;
 
   var TASKS = [
     { text: 'Esatblish Bank Account', phase: 'R' },
