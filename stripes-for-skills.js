@@ -1,11 +1,14 @@
 /* PIBASE Stripes for Skills generator.
- * Recreates the current one-page Stripes for Skills checklist client-side.
+ * Generates a completed one-page checklist entirely in the browser.
+ * If assets/stripes-for-skills-template.pdf is present, the official AcroForm is
+ * filled directly; otherwise PIBASE renders a faithful printable fallback.
  * No applicant data leaves the browser and no Firestore writes are performed.
  */
 (function () {
   'use strict';
 
   var PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+  var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
   var RANKS = ['PVT', 'PV2', 'PFC', 'SPC', 'CPL', 'SGT', 'SSG', 'SFC', 'MSG', '1SG', 'SGM', 'CSM'];
@@ -21,16 +24,16 @@
     { text: 'Execute the Position of Attention', phase: 'R', indent: 1 },
     { text: 'Execute the Hand Salute', phase: 'R', indent: 1 },
     { text: 'Know Who and When to Salute', phase: 'R', indent: 1 },
-    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R', group: true },
+    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
     { text: 'Parade Rest', phase: 'R', indent: 1 },
     { text: 'Stand at Ease', phase: 'R', indent: 1 },
     { text: 'At Ease', phase: 'R', indent: 1 },
     { text: 'Rest', phase: 'R', indent: 1 },
-    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R', group: true },
+    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
     { text: 'Right Face', phase: 'R', indent: 1 },
     { text: 'Left Face', phase: 'R', indent: 1 },
     { text: 'About Face', phase: 'R', indent: 1 },
-    { text: 'Marching (STRM Red Phase)', phase: 'R', group: true },
+    { text: 'Marching (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
     { text: 'Forward March', phase: 'R', indent: 1 },
     { text: 'Half Step', phase: 'R', indent: 1 },
     { text: 'Change Step', phase: 'R', indent: 1 },
@@ -61,6 +64,58 @@
     { event: 'Sprint, Drag, Carry', metric: 'Min : Sec:' },
     { event: 'Plank', metric: 'Min : Sec:' },
     { event: '2.0-Mile Run', metric: 'Min : Sec:' }
+  ];
+
+  var OFFICIAL_RED_FIELDS = [
+    'InitialsDate of CompletionEsatblish Bank Account',
+    'InitialsDate of CompletionStart Direct Deposit',
+    'InitialsDate of CompletionSet up AKO Account',
+    'InitialsDate of CompletionSet up MyPay Account',
+    'InitialsDate of CompletionDrill and Ceremony STRM Red Phase',
+    'InitialsDate of CompletionExecute the Position of Attention',
+    'InitialsDate of CompletionExecute the Hand Salute',
+    'InitialsDate of CompletionKnow Who and When to Salute',
+    'InitialsDate of CompletionExecute Rest Positions While at the Halt STRM Red Phase',
+    'InitialsDate of CompletionParade Rest',
+    'InitialsDate of CompletionStand at Ease',
+    'InitialsDate of CompletionAt Ease',
+    'InitialsDate of CompletionRest',
+    'InitialsDate of CompletionExecute Facing Movements While at the Halt STRM Red Phase',
+    'InitialsDate of CompletionRight Face',
+    'InitialsDate of CompletionLeft Face',
+    'InitialsDate of CompletionAbout Face',
+    'InitialsDate of CompletionMarching STRM Red Phase',
+    'InitialsDate of CompletionForward March',
+    'InitialsDate of CompletionHalf Step',
+    'InitialsDate of CompletionChange Step',
+    'InitialsDate of CompletionHalt',
+    'InitialsDate of CompletionIdenitfy Rank Structure STRM Red Phase',
+    'InitialsDate of CompletionEnlisted Ranks',
+    'InitialsDate of CompletionOfficer Ranks',
+    'InitialsDate of CompletionWarrant Officer Ranks',
+    'InitialsDate of CompletionPhonetic Alphabet STRM Red Phase',
+    'InitialsDate of CompletionKnow  Recite Phonetic Alphabet',
+    'Identify Terrain Features on a Map',
+    'Determine Grid Coordinates on a Map',
+    'Perform First Aid for Splinting a Fracture',
+    'Basic Lead Qualification Skills APPLEMD'
+  ];
+
+  var OFFICIAL_WHITE_FIELDS = [
+    'InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills',
+    'InitialsDate of CompletionColumn Left STRM White Phase',
+    'InitialsDate of CompletionColumn Right STRM White Phase',
+    'InitialsDate of CompletionRecite General Orders STRM White Phase Stripes for Skills',
+    'InitialsDate of CompletionFirst General Order',
+    'InitialsDate of CompletionSecond General Order',
+    'InitialsDate of CompletionThird General Order',
+    'InitialsDate of CompletionFirst AidCLS STRM White Phase',
+    'InitialsDate of CompletionEvaluate a Casualty',
+    'InitialsDate of CompletionPerform First Aid and Prctice Individual Preventative Medicine Countermeasures',
+    'InitialsDate of CompletionPerform First Aid for Bleeding Extremity',
+    'InitialsDate of CompletionPerform First Aid for Splinting a Fracture',
+    'Points', 'Points_2', 'Points_3', 'Points_4', 'Points_5', 'Points_6',
+    'Land Navigation'
   ];
 
   function ymd(dateValue) {
@@ -123,13 +178,16 @@
     return size;
   }
 
-  function drawCentered(page, text, font, size, y, width) {
-    var w = font.widthOfTextAtSize(text, size);
-    page.drawText(text, { x: Math.max(18, (width - w) / 2), y: y, size: size, font: font });
+  function centerX(font, text, size, left, right) {
+    return left + Math.max(0, (right - left - font.widthOfTextAtSize(text, size)) / 2);
   }
 
   function drawLine(page, x1, y1, x2, y2, width) {
-    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: width || 0.5 });
+    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: width || 0.45 });
+  }
+
+  function drawCellText(page, text, font, size, left, right, y) {
+    page.drawText(text, { x: centerX(font, text, size, left, right), y: y, size: size, font: font });
   }
 
   function wrap(font, text, size, maxWidth) {
@@ -147,103 +205,165 @@
     return lines;
   }
 
-  async function makePdf(options) {
-    var PDFLib = await ensurePdfLib();
+  function trySetText(form, name, value, size) {
+    var field = form.getTextField(name);
+    field.setText(value);
+    if (size) {
+      try { field.setFontSize(size); } catch (_) {}
+    }
+  }
+
+  async function fillOfficialTemplate(PDFLib, options) {
+    var response;
+    try {
+      response = await fetch(OFFICIAL_TEMPLATE_URL, { cache: 'force-cache' });
+      if (!response.ok) return null;
+    } catch (_) {
+      return null;
+    }
+    var bytes = new Uint8Array(await response.arrayBuffer());
+    var pdf = await PDFLib.PDFDocument.load(bytes);
+    var form = pdf.getForm();
+    var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
+    var redStamp = stamp(options.redDate);
+    var whiteStamp = stamp(options.whiteDate);
+
+    trySetText(form, 'Date', todayYmd(), 8);
+    trySetText(form, 'NAME  RANK', soldier, 8);
+    trySetText(form, 'PLATOON SGTUNIT', RECRUITER_LINE, 8);
+    OFFICIAL_RED_FIELDS.forEach(function (name) { trySetText(form, name, redStamp, 7); });
+    OFFICIAL_WHITE_FIELDS.forEach(function (name) { trySetText(form, name, whiteStamp, 7); });
+    try { form.updateFieldAppearances(); } catch (_) {}
+    return pdf.save();
+  }
+
+  async function makeFallbackPdf(PDFLib, options) {
     var pdf = await PDFLib.PDFDocument.create();
     var page = pdf.addPage([612, 792]);
     var regular = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
     var bold = await pdf.embedFont(PDFLib.StandardFonts.HelveticaBold);
     var mono = await pdf.embedFont(PDFLib.StandardFonts.Courier);
-    var width = page.getWidth();
+    var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
     var redStamp = stamp(options.redDate);
     var whiteStamp = stamp(options.whiteDate);
-    var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
 
-    drawCentered(page, 'ARMY NATIONAL GUARD', bold, 10.5, 765, width);
-    drawCentered(page, 'STRIPES FOR SKILLS PROGRAM', bold, 10.5, 752, width);
-    page.drawText('Date:', { x: 489, y: 735, size: 7.2, font: regular });
-    page.drawText(todayYmd(), { x: 515, y: 735, size: 7.2, font: mono });
-    drawLine(page, 512, 733, 573, 733, 0.45);
+    var left = 50, right = 562, split = 397.8;
+    var top = 738, bottom = 72;
+    page.drawRectangle({ x: left, y: bottom, width: right - left, height: top - bottom, borderWidth: 0.65 });
 
-    page.drawText('NAME & RANK:', { x: 39, y: 720, size: 7.2, font: bold });
-    page.drawText('PLATOON SGT/UNIT:', { x: 292, y: 720, size: 7.2, font: bold });
-    page.drawText(soldier, { x: 105, y: 720, size: fitText(regular, soldier, 170, 7.4, 5.5), font: regular });
-    page.drawText(RECRUITER_LINE, { x: 382, y: 720, size: 7.1, font: regular });
-    drawLine(page, 103, 718, 275, 718, 0.45);
-    drawLine(page, 379, 718, 573, 718, 0.45);
+    drawLine(page, left, 696, right, 696, 0.55);
+    drawLine(page, left, 676, right, 676, 0.55);
+    drawLine(page, 264, 676, 264, 696, 0.55);
+    drawLine(page, left, 666.6, right, 666.6, 0.55);
+    drawLine(page, split, 132.4, split, 676, 0.55);
 
-    var taskX = 40;
-    var stampX = 420;
-    var rightX = 573;
-    var y = 701;
-    page.drawText('Required Task:', { x: taskX, y: y, size: 7.2, font: bold });
-    page.drawText('Initials/Date of Completion:', { x: stampX, y: y, size: 7.2, font: bold });
-    y -= 11;
+    drawCellText(page, 'ARMY NATIONAL GUARD', bold, 8.2, left, right, 725);
+    drawCellText(page, 'STRIPES FOR SKILLS PROGRAM', bold, 8.2, left, right, 712);
+    page.drawText('Date:', { x: 480, y: 700, size: 6.7, font: regular });
+    page.drawText(todayYmd(), { x: 508, y: 700, size: 6.7, font: mono });
+    drawLine(page, 505, 698, 535, 698, 0.4);
 
-    TASKS.forEach(function (task) {
+    page.drawText('NAME & RANK:', { x: 51, y: 683, size: 6.7, font: bold });
+    page.drawText('PLATOON SGT/UNIT:', { x: 265, y: 683, size: 6.7, font: bold });
+    page.drawText(soldier, { x: 105, y: 683, size: fitText(regular, soldier, 150, 7, 5.4), font: regular });
+    page.drawText(RECRUITER_LINE, { x: 333, y: 683, size: 6.8, font: regular });
+
+    page.drawText('Required Task:', { x: 51, y: 668.6, size: 6.7, font: bold });
+    page.drawText('Initials/Date of Completion:', { x: 399.5, y: 668.6, size: 6.7, font: bold });
+
+    var yTop = 666.6;
+    var row = 10.08;
+    TASKS.forEach(function (task, index) {
+      var rowBottom = yTop - row;
+      drawLine(page, left, rowBottom, right, rowBottom, 0.38);
+      var baseline = rowBottom + 2.35;
       var font = task.group ? bold : regular;
-      var size = task.indent ? 6.05 : 6.15;
-      var text = (task.indent ? '•  ' : '') + task.text;
-      var x = taskX + (task.indent ? 11 : 0);
-      var maxWidth = stampX - x - 10;
-      size = fitText(font, text, maxWidth, size, 4.9);
-      page.drawText(text, { x: x, y: y, size: size, font: font });
-      page.drawText(task.phase === 'W' ? whiteStamp : redStamp, { x: 487, y: y, size: 6.25, font: mono });
-      y -= 8.15;
+      var x = 52;
+      if (task.indent) {
+        page.drawCircle({ x: 72, y: baseline + 2.1, size: 1.15 });
+        x = 83;
+      } else if (task.groupBullet) {
+        page.drawCircle({ x: 54.5, y: baseline + 2.1, size: 1.15 });
+        x = 65;
+      }
+      var max = split - x - 4;
+      var size = fitText(font, task.text, max, 6.2, 4.7);
+      page.drawText(task.text, { x: x, y: baseline, size: size, font: font });
+      var st = task.phase === 'W' ? whiteStamp : redStamp;
+      drawCellText(page, st, mono, 6.4, split, right, baseline);
+      yTop = rowBottom;
     });
 
-    y -= 1.2;
-    var acftHeader = 'Army Combat Fitness Test (ACFT) (Aplicant must achieve minimum score for soldiers physical demand of their unit/MOS with all events';
-    var acftHeader2 = 'being completed on the same day. Events must be performed to standard outlined in the Army Field Testing Manual ACFT.)';
-    page.drawText(acftHeader, { x: taskX, y: y, size: 5.45, font: bold });
-    y -= 7.1;
-    page.drawText(acftHeader2, { x: taskX, y: y, size: 5.45, font: bold });
-    y -= 9;
-    ACFT.forEach(function (row) {
-      page.drawText(row.event, { x: 86, y: y, size: 5.9, font: regular });
-      page.drawText(row.metric, { x: 219, y: y, size: 5.9, font: regular });
-      drawLine(page, 250, y - 1, 301, y - 1, 0.35);
-      page.drawText('Points:', { x: 315, y: y, size: 5.9, font: regular });
-      drawLine(page, 352, y - 1, 401, y - 1, 0.35);
-      page.drawText(whiteStamp, { x: 487, y: y, size: 6.25, font: mono });
-      y -= 8.7;
+    var acftTop = yTop;
+    var acftHeaderBottom = acftTop - 20.16;
+    drawLine(page, left, acftHeaderBottom, right, acftHeaderBottom, 0.45);
+    var acft1 = 'Army Combat Fitness Test (ACFT) (Aplicant must achieve minimum score for soldiers physical demand of their unit/MOS with all events';
+    var acft2 = 'being completed on the same day. Events must be performed to standard outlined in the Army Field Testing Manual ACFT.)';
+    page.drawText(acft1, { x: 52, y: acftTop - 7.3, size: 5.6, font: bold });
+    page.drawText(acft2, { x: 52, y: acftTop - 15.5, size: 5.6, font: bold });
+
+    var eventSplit = 159, metricSplit = 232;
+    drawLine(page, eventSplit, acftHeaderBottom - (6 * row), eventSplit, acftHeaderBottom, 0.4);
+    drawLine(page, metricSplit, acftHeaderBottom - (6 * row), metricSplit, acftHeaderBottom, 0.4);
+    for (var i = 0; i < ACFT.length; i++) {
+      var rTop = acftHeaderBottom - (i * row);
+      var rBottom = rTop - row;
+      drawLine(page, left, rBottom, right, rBottom, 0.38);
+      var b = rBottom + 2.35;
+      var e = ACFT[i];
+      drawCellText(page, e.event, i === 0 || i === 1 || i === 2 || i === 3 || i === 4 || i === 5 ? bold : regular, 5.8, left, eventSplit, b);
+      page.drawText(e.metric, { x: eventSplit + 3, y: b, size: 5.8, font: regular });
+      page.drawText('Points:', { x: metricSplit + 3, y: b, size: 5.8, font: regular });
+      drawCellText(page, whiteStamp, mono, 6.4, split, right, b);
+    }
+
+    yTop = acftHeaderBottom - (6 * row);
+    var landRows = [
+      { text: 'Land Navigation', phase: 'W', group: true },
+      { text: 'Identify Terrain Features on a Map', phase: 'R', indent: 1 },
+      { text: 'Determine Grid Coordinates on a Map', phase: 'R', indent: 1 },
+      { text: 'Perform First Aid for Splinting a Fracture', phase: 'R', indent: 1 },
+      { text: 'Basic Lead Qualification Skills (APPLE-MD)', phase: 'R', group: true }
+    ];
+    landRows.forEach(function (task) {
+      var rb = yTop - row;
+      drawLine(page, left, rb, right, rb, 0.38);
+      var base = rb + 2.35;
+      var tx = 52;
+      if (task.indent) {
+        page.drawCircle({ x: 72, y: base + 2.1, size: 1.15 });
+        tx = 83;
+      }
+      page.drawText(task.text, { x: tx, y: base, size: task.group ? 6.1 : 5.9, font: task.group ? bold : regular });
+      drawCellText(page, task.phase === 'W' ? whiteStamp : redStamp, mono, 6.4, split, right, base);
+      yTop = rb;
     });
 
-    page.drawText('Land Navigation', { x: taskX, y: y, size: 6.2, font: bold });
-    page.drawText(whiteStamp, { x: 487, y: y, size: 6.25, font: mono });
-    y -= 8.2;
-    [
-      'Identify Terrain Features on a Map',
-      'Determine Grid Coordinates on a Map',
-      'Perform First Aid for Splinting a Fracture'
-    ].forEach(function (text) {
-      page.drawText('•  ' + text, { x: taskX + 11, y: y, size: 6.0, font: regular });
-      page.drawText(whiteStamp, { x: 487, y: y, size: 6.25, font: mono });
-      y -= 8.2;
-    });
-
-    page.drawText('Basic Lead Qualification Skills (APPLE-MD)', { x: taskX, y: y, size: 6.2, font: bold });
-    page.drawText(redStamp, { x: 487, y: y, size: 6.25, font: mono });
-    y -= 10.5;
-
+    var scoreY = yTop - 10;
     var scoring1 = 'Score Soldier a GO if the task is performed successfully (Sustainment training should continue during all succeeding months.)';
-    var scoring2 = 'Score Soldier a NO-GO if the Soldier fails one or more areas and the instructor cannot correct the deficiency on the spot (Retraining required at the next military formation.)';
-    wrap(regular, scoring1, 5.1, rightX - taskX).forEach(function (line) {
-      page.drawText(line, { x: taskX, y: y, size: 5.1, font: regular });
-      y -= 6;
+    var scoring2 = 'Soldier a NO-GO if the Soldier fails one or more areas and the instructor cannot correct the deficiency on the spot (Retraining required at the next military formation.)';
+    wrap(regular, scoring1, 5.6, right - left - 42).forEach(function (line) {
+      page.drawText(line, { x: 52, y: scoreY, size: 5.6, font: regular });
+      scoreY -= 7;
     });
-    wrap(regular, scoring2, 5.1, rightX - taskX).forEach(function (line) {
-      page.drawText(line, { x: taskX, y: y, size: 5.1, font: regular });
-      y -= 6;
+    page.drawText('Score', { x: 522, y: yTop - 10, size: 5.6, font: regular });
+    wrap(regular, scoring2, 5.6, right - left - 4).forEach(function (line) {
+      page.drawText(line, { x: 52, y: scoreY, size: 5.6, font: regular });
+      scoreY -= 7;
     });
 
-    y -= 5;
-    drawLine(page, 73, y, 247, y, 0.55);
-    drawLine(page, 330, y, 505, y, 0.55);
-    page.drawText("Trainer's Signature", { x: 119, y: y - 10, size: 5.9, font: regular });
-    page.drawText("Commander's Verification", { x: 370, y: y - 10, size: 5.9, font: regular });
+    drawLine(page, 84, 89, 234, 89, 0.5);
+    drawLine(page, 328, 89, 478, 89, 0.5);
+    drawCellText(page, "Trainer's Signature", bold, 5.9, 84, 234, 79);
+    drawCellText(page, "Commander's Verification", bold, 5.9, 328, 478, 79);
 
     return pdf.save();
+  }
+
+  async function makePdf(options) {
+    var PDFLib = await ensurePdfLib();
+    var official = await fillOfficialTemplate(PDFLib, options);
+    return official || makeFallbackPdf(PDFLib, options);
   }
 
   async function shareOrDownload(bytes, name) {
@@ -313,7 +433,7 @@
     button.textContent = 'Generate Stripes for Skills';
     var helper = document.createElement('div');
     helper.className = 'helper';
-    helper.textContent = 'Uses JV/YYYYMMDD for the Red and White phase completion dates. Signature and commander verification remain blank.';
+    helper.textContent = 'Uses JV/YYYYMMDD for Red and White phase completion dates. Trainer signature and commander verification remain blank.';
     notesTitle.parentNode.insertBefore(title, notesTitle);
     notesTitle.parentNode.insertBefore(button, notesTitle);
     notesTitle.parentNode.insertBefore(helper, notesTitle);
@@ -332,7 +452,7 @@
     modal.innerHTML = '' +
       '<div class="sfs-panel">' +
         '<div class="sfs-head"><div><div class="eyebrow">RSP DOCUMENT</div><h2 id="sfsTitle">Stripes for Skills</h2></div><button class="sfs-close" id="sfsCloseBtn" type="button" aria-label="Close">×</button></div>' +
-        '<div class="helper">PIBASE fills the Soldier, recruiter line, and Red/White completion dates. Trainer signature and commander verification remain blank for normal signing.</div>' +
+        '<div class="helper">PIBASE fills the Soldier name, recruiter line, and Red/White completion dates. The document date is today.</div>' +
         '<label for="sfsRank">Rank</label><select id="sfsRank">' + RANKS.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select>' +
         '<label for="sfsSoldierName">Soldier name</label><input id="sfsSoldierName" type="text" autocomplete="off">' +
         '<div class="field-row"><div><label for="sfsRedDate">Red Phase date</label><input id="sfsRedDate" type="date"></div><div><label for="sfsWhiteDate">White Phase date</label><input id="sfsWhiteDate" type="date"></div></div>' +
@@ -427,6 +547,10 @@
     ymd: ymd,
     stamp: stamp,
     inferRankAndName: inferRankAndName,
-    tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; })
+    initials: INITIALS,
+    recruiterLine: RECRUITER_LINE,
+    tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; }),
+    officialRedFields: OFFICIAL_RED_FIELDS.slice(),
+    officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice()
   };
 }());
