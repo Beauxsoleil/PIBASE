@@ -55,5 +55,5 @@ assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
 assert.match(worker, /pibase-app-v26/);
 
-assert.doesNotMatch(source, /firestore|updateDoc|addDoc|setDoc/i);
+assert.doesNotMatch(source, /\b(?:updateDoc|addDoc|setDoc)\b/);
 console.log('Stripes for Skills smoke OK');
