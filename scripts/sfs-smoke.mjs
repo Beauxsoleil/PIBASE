@@ -34,9 +34,9 @@ assert.deepStrictEqual(
 );
 
 const phase = new Map(api.tasks.map(t => [t.text, t.phase]));
-assert.strictEqual(phase.get('Military Time (STRM White Phase Stripes for Skills)'), 'W');
-assert.strictEqual(phase.get('Column Left (STRM White Phase)'), 'W');
-assert.strictEqual(phase.get('Column Right (STRM White Phase)'), 'W');
+assert.strictEqual(phase.get('Military Time (STRM White Phase Stripes for Skills)'), 'R');
+assert.strictEqual(phase.get('Column Left (STRM White Phase)'), 'R');
+assert.strictEqual(phase.get('Column Right (STRM White Phase)'), 'R');
 assert.strictEqual(phase.get('Drill and Ceremony (STRM Red Phase)'), 'R');
 assert.strictEqual(phase.get('Recite General Orders (STRM White Phase Stripes for Skills)'), 'W');
 assert.strictEqual(phase.get('Phonetic Alphabet (STRM Red Phase)'), 'R');
@@ -45,15 +45,17 @@ assert.ok(api.officialRedFields.includes('Basic Lead Qualification Skills APPLEM
 assert.ok(api.officialRedFields.includes('Identify Terrain Features on a Map'));
 assert.ok(api.officialWhiteFields.includes('Land Navigation'));
 assert.ok(api.officialWhiteFields.includes('Points_6'));
-assert.ok(api.officialWhiteFields.includes('InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills'));
-assert.ok(!api.officialRedFields.includes('InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills'));
+assert.ok(api.officialRedFields.includes('InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills'));
+assert.ok(!api.officialWhiteFields.includes('InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills'));
+assert.ok(api.officialRedFields.includes('InitialsDate of CompletionColumn Left STRM White Phase'));
+assert.ok(api.officialRedFields.includes('InitialsDate of CompletionColumn Right STRM White Phase'));
 
 const index = await readFile(join(root, 'index.html'), 'utf8');
 assert.match(index, /<script defer src="\.\/stripes-for-skills\.js"><\/script>/);
 const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
 assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
-assert.match(worker, /pibase-app-v27/);
+assert.match(worker, /pibase-app-v28/);
 
 assert.doesNotMatch(source, /page\.drawRectangle/);
 assert.match(source, /drawLine\(page, left, bottom, right, bottom, 0\.65\)/);
