@@ -17,6 +17,7 @@ const APP_SHELL = [
   'kiosk-runtime.js',
   'assets/boudreaux-sprites.webp',
   'assets/thibideaux-sprites.webp',
+  'assets/stripes-for-skills-template.pdf',
   'boudreaux-kiosk.js',
   'thibodeaux-kiosk.js',
   'boudreaux-mobile.js',
