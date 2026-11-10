@@ -1,71 +1,23 @@
 /* PIBASE Stripes for Skills generator.
- * Generates a completed one-page checklist entirely in the browser.
- * If assets/stripes-for-skills-template.pdf is present, the official AcroForm is
- * filled directly; otherwise PIBASE renders a faithful printable fallback.
- * No applicant data leaves the browser and no Firestore writes are performed.
+ * Uses the official Army National Guard Stripes for Skills PDF as the source
+ * document. The blank template is imported once per device (or loaded from the
+ * optional bundled asset), validated by field name, filled, and flattened so
+ * the finished PDF renders consistently across Adobe, iOS, and print viewers.
+ * No applicant data is written to Firestore.
  */
 (function () {
   'use strict';
 
   var PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
   var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
+  var TEMPLATE_STORAGE_KEY = 'pibase.sfs.officialTemplate.v1';
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
   var RANKS = ['PVT', 'PV2', 'PFC', 'SPC', 'CPL', 'SGT', 'SSG', 'SFC', 'MSG', '1SG', 'SGM', 'CSM'];
+
   var pdfLibPromise = null;
   var generatedPdf = null;
-
-  var TASKS = [
-    { text: 'Esatblish Bank Account', phase: 'R' },
-    { text: 'Start Direct Deposit', phase: 'R' },
-    { text: 'Set up AKO Account', phase: 'R' },
-    { text: 'Set up MyPay Account', phase: 'R' },
-    { text: 'Military Time (STRM White Phase Stripes for Skills)', phase: 'R' },
-    { text: 'Drill and Ceremony (STRM Red Phase)', phase: 'R', group: true },
-    { text: 'Execute the Position of Attention', phase: 'R', indent: 1 },
-    { text: 'Execute the Hand Salute', phase: 'R', indent: 1 },
-    { text: 'Know Who and When to Salute', phase: 'R', indent: 1 },
-    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
-    { text: 'Parade Rest', phase: 'R', indent: 1 },
-    { text: 'Stand at Ease', phase: 'R', indent: 1 },
-    { text: 'At Ease', phase: 'R', indent: 1 },
-    { text: 'Rest', phase: 'R', indent: 1 },
-    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
-    { text: 'Right Face', phase: 'R', indent: 1 },
-    { text: 'Left Face', phase: 'R', indent: 1 },
-    { text: 'About Face', phase: 'R', indent: 1 },
-    { text: 'Marching (STRM Red Phase)', phase: 'R', group: true, groupBullet: true },
-    { text: 'Forward March', phase: 'R', indent: 1 },
-    { text: 'Half Step', phase: 'R', indent: 1 },
-    { text: 'Change Step', phase: 'R', indent: 1 },
-    { text: 'Column Left (STRM White Phase)', phase: 'R', indent: 1 },
-    { text: 'Column Right (STRM White Phase)', phase: 'R', indent: 1 },
-    { text: 'Halt', phase: 'R', indent: 1 },
-    { text: 'Recite General Orders (STRM White Phase Stripes for Skills)', phase: 'W', group: true },
-    { text: 'First General Order', phase: 'W', indent: 1 },
-    { text: 'Second General Order', phase: 'W', indent: 1 },
-    { text: 'Third General Order', phase: 'W', indent: 1 },
-    { text: 'Idenitfy Rank Structure (STRM Red Phase)', phase: 'R', group: true },
-    { text: 'Enlisted Ranks', phase: 'R', indent: 1 },
-    { text: 'Officer Ranks', phase: 'R', indent: 1 },
-    { text: 'Warrant Officer Ranks', phase: 'R', indent: 1 },
-    { text: 'Phonetic Alphabet (STRM Red Phase)', phase: 'R', group: true },
-    { text: 'Know / Recite Phonetic Alphabet', phase: 'R', indent: 1 },
-    { text: 'First Aid/CLS (STRM White Phase)', phase: 'W', group: true },
-    { text: 'Evaluate a Casualty', phase: 'W', indent: 1 },
-    { text: 'Perform First Aid and Prctice Individual Preventative Medicine Countermeasures', phase: 'W', indent: 1 },
-    { text: 'Perform First Aid for Bleeding Extremity', phase: 'W', indent: 1 },
-    { text: 'Perform First Aid for Splinting a Fracture', phase: 'W', indent: 1 }
-  ];
-
-  var ACFT = [
-    { event: '3RM Deadlift', metric: 'LBS:' },
-    { event: 'Standing Power Throw', metric: 'Meters:' },
-    { event: 'Hand Release Push-Up', metric: 'Repitions:' },
-    { event: 'Sprint, Drag, Carry', metric: 'Min : Sec:' },
-    { event: 'Plank', metric: 'Min : Sec:' },
-    { event: '2.0-Mile Run', metric: 'Min : Sec:' }
-  ];
+  var templateState = null;
 
   var OFFICIAL_RED_FIELDS = [
     'InitialsDate of CompletionEsatblish Bank Account',
@@ -73,8 +25,6 @@
     'InitialsDate of CompletionSet up AKO Account',
     'InitialsDate of CompletionSet up MyPay Account',
     'InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills',
-    'InitialsDate of CompletionColumn Left STRM White Phase',
-    'InitialsDate of CompletionColumn Right STRM White Phase',
     'InitialsDate of CompletionDrill and Ceremony STRM Red Phase',
     'InitialsDate of CompletionExecute the Position of Attention',
     'InitialsDate of CompletionExecute the Hand Salute',
@@ -92,6 +42,8 @@
     'InitialsDate of CompletionForward March',
     'InitialsDate of CompletionHalf Step',
     'InitialsDate of CompletionChange Step',
+    'InitialsDate of CompletionColumn Left STRM White Phase',
+    'InitialsDate of CompletionColumn Right STRM White Phase',
     'InitialsDate of CompletionHalt',
     'InitialsDate of CompletionIdenitfy Rank Structure STRM Red Phase',
     'InitialsDate of CompletionEnlisted Ranks',
@@ -117,6 +69,55 @@
     'InitialsDate of CompletionPerform First Aid for Splinting a Fracture',
     'Points', 'Points_2', 'Points_3', 'Points_4', 'Points_5', 'Points_6',
     'Land Navigation'
+  ];
+
+  var EXPECTED_TEMPLATE_FIELDS = [
+    'Date',
+    'NAME  RANK',
+    'PLATOON SGTUNIT'
+  ].concat(OFFICIAL_RED_FIELDS, OFFICIAL_WHITE_FIELDS);
+
+  var TASKS = [
+    { text: 'Esatblish Bank Account', phase: 'R' },
+    { text: 'Start Direct Deposit', phase: 'R' },
+    { text: 'Set up AKO Account', phase: 'R' },
+    { text: 'Set up MyPay Account', phase: 'R' },
+    { text: 'Military Time (STRM White Phase Stripes for Skills)', phase: 'R' },
+    { text: 'Drill and Ceremony (STRM Red Phase)', phase: 'R' },
+    { text: 'Execute the Position of Attention', phase: 'R' },
+    { text: 'Execute the Hand Salute', phase: 'R' },
+    { text: 'Know Who and When to Salute', phase: 'R' },
+    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R' },
+    { text: 'Parade Rest', phase: 'R' },
+    { text: 'Stand at Ease', phase: 'R' },
+    { text: 'At Ease', phase: 'R' },
+    { text: 'Rest', phase: 'R' },
+    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R' },
+    { text: 'Right Face', phase: 'R' },
+    { text: 'Left Face', phase: 'R' },
+    { text: 'About Face', phase: 'R' },
+    { text: 'Marching (STRM Red Phase)', phase: 'R' },
+    { text: 'Forward March', phase: 'R' },
+    { text: 'Half Step', phase: 'R' },
+    { text: 'Change Step', phase: 'R' },
+    { text: 'Column Left (STRM White Phase)', phase: 'R' },
+    { text: 'Column Right (STRM White Phase)', phase: 'R' },
+    { text: 'Halt', phase: 'R' },
+    { text: 'Recite General Orders (STRM White Phase Stripes for Skills)', phase: 'W' },
+    { text: 'First General Order', phase: 'W' },
+    { text: 'Second General Order', phase: 'W' },
+    { text: 'Third General Order', phase: 'W' },
+    { text: 'Idenitfy Rank Structure (STRM Red Phase)', phase: 'R' },
+    { text: 'Enlisted Ranks', phase: 'R' },
+    { text: 'Officer Ranks', phase: 'R' },
+    { text: 'Warrant Officer Ranks', phase: 'R' },
+    { text: 'Phonetic Alphabet (STRM Red Phase)', phase: 'R' },
+    { text: 'Know / Recite Phonetic Alphabet', phase: 'R' },
+    { text: 'First Aid/CLS (STRM White Phase)', phase: 'W' },
+    { text: 'Evaluate a Casualty', phase: 'W' },
+    { text: 'Perform First Aid and Prctice Individual Preventative Medicine Countermeasures', phase: 'W' },
+    { text: 'Perform First Aid for Bleeding Extremity', phase: 'W' },
+    { text: 'Perform First Aid for Splinting a Fracture', phase: 'W' }
   ];
 
   function ymd(dateValue) {
@@ -173,40 +174,83 @@
     return pdfLibPromise;
   }
 
-  function fitText(font, text, maxWidth, startSize, minSize) {
-    var size = startSize;
-    while (size > minSize && font.widthOfTextAtSize(text, size) > maxWidth) size -= 0.25;
-    return size;
+  function bytesToBase64(bytes) {
+    var binary = '';
+    var chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+    }
+    return btoa(binary);
   }
 
-  function centerX(font, text, size, left, right) {
-    return left + Math.max(0, (right - left - font.widthOfTextAtSize(text, size)) / 2);
+  function base64ToBytes(base64) {
+    var binary = atob(String(base64 || ''));
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   }
 
-  function drawLine(page, x1, y1, x2, y2, width) {
-    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: width || 0.45 });
+  async function validateTemplate(PDFLib, bytes) {
+    var pdf = await PDFLib.PDFDocument.load(bytes);
+    if (pdf.getPageCount() !== 1) throw new Error('This is not the one-page Stripes for Skills form.');
+    var form = pdf.getForm();
+    var fields = form.getFields();
+    var names = new Set(fields.map(function (field) { return field.getName(); }));
+    var missing = EXPECTED_TEMPLATE_FIELDS.filter(function (name) { return !names.has(name); });
+    if (missing.length) {
+      throw new Error('Wrong or incompatible Stripes for Skills PDF. Missing ' + missing.length + ' expected fields.');
+    }
+    return { fieldCount: fields.length };
   }
 
-  function drawCellText(page, text, font, size, left, right, y) {
-    page.drawText(text, { x: centerX(font, text, size, left, right), y: y, size: size, font: font });
+  async function readBundledTemplate(PDFLib) {
+    try {
+      var response = await fetch(OFFICIAL_TEMPLATE_URL, { cache: 'force-cache' });
+      if (!response.ok) return null;
+      var bytes = new Uint8Array(await response.arrayBuffer());
+      var meta = await validateTemplate(PDFLib, bytes);
+      return { bytes: bytes, source: 'bundled', fieldCount: meta.fieldCount };
+    } catch (_) {
+      return null;
+    }
   }
 
-  function wrap(font, text, size, maxWidth) {
-    var words = String(text).split(/\s+/);
-    var lines = [];
-    var line = '';
-    words.forEach(function (word) {
-      var next = line ? line + ' ' + word : word;
-      if (line && font.widthOfTextAtSize(next, size) > maxWidth) {
-        lines.push(line);
-        line = word;
-      } else line = next;
-    });
-    if (line) lines.push(line);
-    return lines;
+  async function readSavedTemplate(PDFLib) {
+    var saved = '';
+    try { saved = localStorage.getItem(TEMPLATE_STORAGE_KEY) || ''; } catch (_) {}
+    if (!saved) return null;
+    try {
+      var bytes = base64ToBytes(saved);
+      var meta = await validateTemplate(PDFLib, bytes);
+      return { bytes: bytes, source: 'saved', fieldCount: meta.fieldCount };
+    } catch (err) {
+      try { localStorage.removeItem(TEMPLATE_STORAGE_KEY); } catch (_) {}
+      console.warn('Saved Stripes template was invalid and has been cleared.', err);
+      return null;
+    }
   }
 
-  function trySetText(form, name, value, size) {
+  async function getOfficialTemplate(PDFLib) {
+    if (templateState && templateState.bytes) return templateState;
+    templateState = await readBundledTemplate(PDFLib);
+    if (!templateState) templateState = await readSavedTemplate(PDFLib);
+    return templateState;
+  }
+
+  async function saveImportedTemplate(file) {
+    var PDFLib = await ensurePdfLib();
+    var bytes = new Uint8Array(await file.arrayBuffer());
+    var meta = await validateTemplate(PDFLib, bytes);
+    try {
+      localStorage.setItem(TEMPLATE_STORAGE_KEY, bytesToBase64(bytes));
+    } catch (err) {
+      throw new Error('The official PDF is valid, but this device could not save it for reuse.');
+    }
+    templateState = { bytes: bytes, source: 'saved', fieldCount: meta.fieldCount };
+    return templateState;
+  }
+
+  function setText(form, name, value, size) {
     var field = form.getTextField(name);
     field.setText(value);
     if (size) {
@@ -215,162 +259,38 @@
   }
 
   async function fillOfficialTemplate(PDFLib, options) {
-    var response;
-    try {
-      response = await fetch(OFFICIAL_TEMPLATE_URL, { cache: 'force-cache' });
-      if (!response.ok) return null;
-    } catch (_) {
-      return null;
+    var template = await getOfficialTemplate(PDFLib);
+    if (!template) {
+      var err = new Error('Official Stripes for Skills template required.');
+      err.code = 'SFS_TEMPLATE_REQUIRED';
+      throw err;
     }
-    var bytes = new Uint8Array(await response.arrayBuffer());
-    var pdf = await PDFLib.PDFDocument.load(bytes);
+
+    var pdf = await PDFLib.PDFDocument.load(template.bytes);
     var form = pdf.getForm();
+    var font = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
     var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
     var redStamp = stamp(options.redDate);
     var whiteStamp = stamp(options.whiteDate);
 
-    trySetText(form, 'Date', todayYmd(), 8);
-    trySetText(form, 'NAME  RANK', soldier, 8);
-    trySetText(form, 'PLATOON SGTUNIT', RECRUITER_LINE, 8);
-    OFFICIAL_RED_FIELDS.forEach(function (name) { trySetText(form, name, redStamp, 7); });
-    OFFICIAL_WHITE_FIELDS.forEach(function (name) { trySetText(form, name, whiteStamp, 7); });
-    try { form.updateFieldAppearances(); } catch (_) {}
-    return pdf.save();
-  }
+    setText(form, 'Date', todayYmd(), 7);
+    setText(form, 'NAME  RANK', soldier, 8);
+    setText(form, 'PLATOON SGTUNIT', RECRUITER_LINE, 9);
 
-  async function makeFallbackPdf(PDFLib, options) {
-    var pdf = await PDFLib.PDFDocument.create();
-    var page = pdf.addPage([612, 792]);
-    var regular = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
-    var bold = await pdf.embedFont(PDFLib.StandardFonts.HelveticaBold);
-    var mono = await pdf.embedFont(PDFLib.StandardFonts.Courier);
-    var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
-    var redStamp = stamp(options.redDate);
-    var whiteStamp = stamp(options.whiteDate);
+    OFFICIAL_RED_FIELDS.forEach(function (name) { setText(form, name, redStamp, 7); });
+    OFFICIAL_WHITE_FIELDS.forEach(function (name) { setText(form, name, whiteStamp, 7); });
 
-    var left = 51, right = 511.8, split = 397.2;
-    var completionLeft = 397.8, completionRight = 510.96;
-    var top = 738.12, bottom = 72.24;
-    // Draw the form border as four strokes. pdf-lib fills rectangles black by
-    // default when only borderWidth is supplied, which hid the entire checklist.
-    drawLine(page, left, bottom, right, bottom, 0.65);
-    drawLine(page, left, top, right, top, 0.65);
-    drawLine(page, left, bottom, left, top, 0.65);
-    drawLine(page, right, bottom, right, top, 0.65);
+    // Force appearance streams before flattening. This avoids viewer-specific
+    // blank fields, black overlays, and inconsistent AcroForm rendering.
+    form.updateFieldAppearances(font);
+    form.flatten();
 
-    drawLine(page, left, 697.8, right, 697.8, 0.55);
-    drawLine(page, left, 677.64, right, 677.64, 0.55);
-    drawLine(page, 195.36, 677.64, 195.36, 697.8, 0.55);
-    drawLine(page, left, 667.56, right, 667.56, 0.55);
-    drawLine(page, split, 132.36, split, 677.64, 0.55);
-
-    drawCellText(page, 'ARMY NATIONAL GUARD', bold, 8.2, left, right, 725);
-    drawCellText(page, 'STRIPES FOR SKILLS PROGRAM', bold, 8.2, left, right, 712);
-    page.drawText('Date:', { x: 436.4, y: 701.2, size: 7.0, font: regular });
-    page.drawText(todayYmd(), { x: 455.5, y: 702.0, size: 5.25, font: regular });
-    drawLine(page, 453.5, 699.4, 480.7, 699.4, 0.4);
-
-    page.drawText('NAME & RANK:', { x: 52.1, y: 685.2, size: 7.0, font: bold });
-    page.drawText('PLATOON SGT/UNIT:', { x: 197.1, y: 685.2, size: 7.0, font: bold });
-    page.drawText(soldier, { x: 103.9, y: 682.7, size: fitText(regular, soldier, 89, 7.5, 5.5), font: regular });
-    page.drawText(RECRUITER_LINE, { x: 266.4, y: 681.6, size: fitText(regular, RECRUITER_LINE, 142, 12.47, 8), font: regular });
-
-    page.drawText('Required Task:', { x: 52.1, y: 669.6, size: 7.0, font: bold });
-    page.drawText('Initials/Date of Completion:', { x: 398.6, y: 669.6, size: 7.0, font: bold });
-
-    var yTop = 667.56;
-    var row = 10.08;
-    TASKS.forEach(function (task, index) {
-      var rowBottom = yTop - row;
-      drawLine(page, left, rowBottom, right, rowBottom, 0.38);
-      var baseline = rowBottom + 2.7;
-      var font = task.group ? bold : regular;
-      var x = 52;
-      if (task.indent) {
-        page.drawCircle({ x: 72, y: baseline + 2.1, size: 1.15 });
-        x = 83;
-      } else if (task.groupBullet) {
-        page.drawCircle({ x: 54.5, y: baseline + 2.1, size: 1.15 });
-        x = 65;
-      }
-      var max = split - x - 4;
-      var size = fitText(font, task.text, max, 7.0, 5.2);
-      page.drawText(task.text, { x: x, y: baseline, size: size, font: font });
-      var st = task.phase === 'W' ? whiteStamp : redStamp;
-      drawCellText(page, st, regular, 5.26, completionLeft, completionRight, baseline + 0.1);
-      yTop = rowBottom;
-    });
-
-    var acftTop = yTop;
-    var acftHeaderBottom = acftTop - 20.16;
-    drawLine(page, left, acftHeaderBottom, right, acftHeaderBottom, 0.45);
-    var acft1 = 'Army Combat Fitness Test (ACFT) (Aplicant must achieve minimum score for soldiers physical demand of their unit/MOS with all events';
-    var acft2 = 'being completed on the same day. Events must be performed to standard outlined in the Army Field Testing Manual ACFT.)';
-    page.drawText(acft1, { x: 52, y: acftTop - 7.3, size: 5.6, font: bold });
-    page.drawText(acft2, { x: 52, y: acftTop - 15.5, size: 5.6, font: bold });
-
-    var eventSplit = 159, metricSplit = 232;
-    drawLine(page, eventSplit, acftHeaderBottom - (6 * row), eventSplit, acftHeaderBottom, 0.4);
-    drawLine(page, metricSplit, acftHeaderBottom - (6 * row), metricSplit, acftHeaderBottom, 0.4);
-    for (var i = 0; i < ACFT.length; i++) {
-      var rTop = acftHeaderBottom - (i * row);
-      var rBottom = rTop - row;
-      drawLine(page, left, rBottom, right, rBottom, 0.38);
-      var b = rBottom + 2.35;
-      var e = ACFT[i];
-      drawCellText(page, e.event, i === 0 || i === 1 || i === 2 || i === 3 || i === 4 || i === 5 ? bold : regular, 5.8, left, eventSplit, b);
-      page.drawText(e.metric, { x: eventSplit + 3, y: b, size: 5.8, font: regular });
-      page.drawText('Points:', { x: metricSplit + 3, y: b, size: 5.8, font: regular });
-      page.drawText(whiteStamp, { x: 399.8, y: b + 0.1, size: 5.26, font: regular });
-    }
-
-    yTop = acftHeaderBottom - (6 * row);
-    var landRows = [
-      { text: 'Land Navigation', phase: 'W', group: true },
-      { text: 'Identify Terrain Features on a Map', phase: 'R', indent: 1 },
-      { text: 'Determine Grid Coordinates on a Map', phase: 'R', indent: 1 },
-      { text: 'Perform First Aid for Splinting a Fracture', phase: 'R', indent: 1 },
-      { text: 'Basic Lead Qualification Skills (APPLE-MD)', phase: 'R', group: true }
-    ];
-    landRows.forEach(function (task) {
-      var rb = yTop - row;
-      drawLine(page, left, rb, right, rb, 0.38);
-      var base = rb + 2.35;
-      var tx = 52;
-      if (task.indent) {
-        page.drawCircle({ x: 72, y: base + 2.1, size: 1.15 });
-        tx = 83;
-      }
-      page.drawText(task.text, { x: tx, y: base, size: task.group ? 6.1 : 5.9, font: task.group ? bold : regular });
-      page.drawText(task.phase === 'W' ? whiteStamp : redStamp, { x: 399.8, y: base + 0.1, size: 5.26, font: regular });
-      yTop = rb;
-    });
-
-    var scoreY = yTop - 10;
-    var scoring1 = 'Score Soldier a GO if the task is performed successfully (Sustainment training should continue during all succeeding months.)';
-    var scoring2 = 'Soldier a NO-GO if the Soldier fails one or more areas and the instructor cannot correct the deficiency on the spot (Retraining required at the next military formation.)';
-    wrap(regular, scoring1, 5.6, right - left - 42).forEach(function (line) {
-      page.drawText(line, { x: 52, y: scoreY, size: 5.6, font: regular });
-      scoreY -= 7;
-    });
-    page.drawText('Score', { x: 522, y: yTop - 10, size: 5.6, font: regular });
-    wrap(regular, scoring2, 5.6, right - left - 4).forEach(function (line) {
-      page.drawText(line, { x: 52, y: scoreY, size: 5.6, font: regular });
-      scoreY -= 7;
-    });
-
-    drawLine(page, 84, 89, 234, 89, 0.5);
-    drawLine(page, 328, 89, 478, 89, 0.5);
-    drawCellText(page, "Trainer's Signature", bold, 5.9, 84, 234, 79);
-    drawCellText(page, "Commander's Verification", bold, 5.9, 328, 478, 79);
-
-    return pdf.save();
+    return pdf.save({ useObjectStreams: false });
   }
 
   async function makePdf(options) {
     var PDFLib = await ensurePdfLib();
-    var official = await fillOfficialTemplate(PDFLib, options);
-    return official || makeFallbackPdf(PDFLib, options);
+    return fillOfficialTemplate(PDFLib, options);
   }
 
   function clearGeneratedPdf() {
@@ -434,10 +354,14 @@
     style.id = 'sfsStyles';
     style.textContent = [
       '.sfs-modal{position:fixed;inset:0;z-index:1500;background:rgba(4,8,7,.82);display:flex;align-items:flex-end;justify-content:center;padding:14px}',
-      '.sfs-panel{width:min(100%,520px);max-height:92vh;overflow:auto;background:var(--surface);border:1px solid var(--line-bright);border-radius:12px 12px 6px 6px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}',
+      '.sfs-panel{width:min(100%,540px);max-height:92vh;overflow:auto;background:var(--surface);border:1px solid var(--line-bright);border-radius:12px 12px 6px 6px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}',
       '.sfs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:8px}',
       '.sfs-head h2{font-family:var(--font-display);font-size:1.15rem;margin:0}',
       '.sfs-close{background:none;border:0;color:var(--text-muted);font-size:1.5rem;line-height:1;padding:0 2px}',
+      '.sfs-template-card{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-raised);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:12px 0}',
+      '.sfs-template-card strong{display:block;font-size:.78rem}',
+      '.sfs-template-card span{display:block;color:var(--text-muted);font-size:.7rem;margin-top:2px}',
+      '.sfs-template-card .btn{width:auto;white-space:nowrap;margin:0}',
       '.sfs-stamp{font-family:var(--font-mono);font-size:.78rem;color:var(--brass);background:var(--bg-raised);border:1px solid var(--line);padding:8px 10px;border-radius:4px;margin-top:10px}',
       '.sfs-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:8px;margin-top:16px}',
       '.sfs-actions .btn{width:100%;margin:0}',
@@ -456,26 +380,63 @@
       return el.textContent.trim() === 'Notes';
     });
     if (!notesTitle) return null;
+
     var title = document.createElement('div');
     title.className = 'section-title';
     title.textContent = 'Documents';
+
     button = document.createElement('button');
     button.className = 'btn btn-secondary btn-block';
     button.id = 'stripesForSkillsBtn';
     button.type = 'button';
     button.textContent = 'Generate Stripes for Skills';
+
     var helper = document.createElement('div');
     helper.className = 'helper';
-    helper.textContent = 'Uses JV/YYYYMMDD for Red and White phase completion dates. Trainer signature and commander verification remain blank.';
+    helper.textContent = 'Fills the official Army form with JV/YYYYMMDD Red/White phase stamps.';
+
     notesTitle.parentNode.insertBefore(title, notesTitle);
     notesTitle.parentNode.insertBefore(button, notesTitle);
     notesTitle.parentNode.insertBefore(helper, notesTitle);
     return button;
   }
 
+  async function refreshTemplateStatus() {
+    var status = document.getElementById('sfsTemplateStatus');
+    var detail = document.getElementById('sfsTemplateDetail');
+    var button = document.getElementById('sfsTemplateBtn');
+    if (!status || !detail || !button) return;
+
+    status.textContent = 'Checking official template…';
+    detail.textContent = 'One-time setup on this device.';
+    button.textContent = 'Import PDF';
+
+    try {
+      var PDFLib = await ensurePdfLib();
+      var template = await getOfficialTemplate(PDFLib);
+      if (template) {
+        status.textContent = 'Official template ready';
+        detail.textContent = template.source === 'bundled'
+          ? 'Built into PIBASE • ' + template.fieldCount + ' fields verified'
+          : 'Saved on this device • ' + template.fieldCount + ' fields verified';
+        button.textContent = template.source === 'bundled' ? 'Template OK' : 'Replace';
+        button.disabled = template.source === 'bundled';
+        return;
+      }
+    } catch (err) {
+      console.warn('Could not check Stripes template', err);
+    }
+
+    status.textContent = 'Official template required';
+    detail.textContent = 'Import the blank Stripes for Skills PDF once; PIBASE will remember it.';
+    button.textContent = 'Import PDF';
+    button.disabled = false;
+  }
+
   function ensureModal() {
     var modal = document.getElementById('sfsModal');
     if (modal) return modal;
+
     modal = document.createElement('div');
     modal.id = 'sfsModal';
     modal.className = 'sfs-modal hidden';
@@ -485,12 +446,14 @@
     modal.innerHTML = '' +
       '<div class="sfs-panel">' +
         '<div class="sfs-head"><div><div class="eyebrow">RSP DOCUMENT</div><h2 id="sfsTitle">Stripes for Skills</h2></div><button class="sfs-close" id="sfsCloseBtn" type="button" aria-label="Close">×</button></div>' +
-        '<div class="helper">PIBASE fills the Soldier name, recruiter line, and Red/White completion dates. The document date is today.</div>' +
+        '<div class="helper">PIBASE uses the official Army PDF, fills the selected Soldier and phase dates, then flattens the form for reliable viewing and printing.</div>' +
+        '<div class="sfs-template-card"><div><strong id="sfsTemplateStatus">Checking official template…</strong><span id="sfsTemplateDetail">One-time setup on this device.</span></div><button class="btn btn-secondary" id="sfsTemplateBtn" type="button">Import PDF</button></div>' +
+        '<input id="sfsTemplateFile" class="hidden" type="file" accept="application/pdf">' +
         '<label for="sfsRank">Rank</label><select id="sfsRank">' + RANKS.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select>' +
         '<label for="sfsSoldierName">Soldier name</label><input id="sfsSoldierName" type="text" autocomplete="off">' +
         '<div class="field-row"><div><label for="sfsRedDate">Red Phase date</label><input id="sfsRedDate" type="date"></div><div><label for="sfsWhiteDate">White Phase date</label><input id="sfsWhiteDate" type="date"></div></div>' +
         '<div class="sfs-stamp"><div>Red: <span id="sfsRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsWhitePreview">JV/________</span></div><div style="margin-top:4px;color:var(--text-muted)">Recruiter: ' + RECRUITER_LINE + '</div></div>' +
-        '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate PDF</button></div>' +
+        '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate Official PDF</button></div>' +
         '<div class="sfs-status" id="sfsStatus"></div>' +
         '<div class="sfs-result-actions hidden" id="sfsResultActions"><a class="btn btn-secondary" id="sfsPreviewBtn" target="_blank" rel="noopener">Preview PDF</a><button class="btn btn-primary" id="sfsShareBtn" type="button">Share / Save</button></div>' +
       '</div>';
@@ -500,11 +463,38 @@
       modal.classList.add('hidden');
       clearGeneratedPdf();
     }
+
     document.getElementById('sfsCloseBtn').addEventListener('click', close);
     document.getElementById('sfsCancelBtn').addEventListener('click', close);
     modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+    });
+
+    document.getElementById('sfsTemplateBtn').addEventListener('click', function () {
+      document.getElementById('sfsTemplateFile').click();
+    });
+
+    document.getElementById('sfsTemplateFile').addEventListener('change', async function (e) {
+      var file = e.target.files && e.target.files[0];
+      var status = document.getElementById('sfsStatus');
+      if (!file) return;
+
+      status.style.color = '';
+      status.textContent = 'Validating official form…';
+      try {
+        var template = await saveImportedTemplate(file);
+        status.textContent = 'Official template saved. You will not need to import it again on this device.';
+        document.getElementById('sfsTemplateStatus').textContent = 'Official template ready';
+        document.getElementById('sfsTemplateDetail').textContent = 'Saved on this device • ' + template.fieldCount + ' fields verified';
+        document.getElementById('sfsTemplateBtn').textContent = 'Replace';
+      } catch (err) {
+        console.error('Stripes template import failed', err);
+        status.style.color = '#E08B77';
+        status.textContent = err && err.message ? err.message : 'That PDF is not the expected Stripes for Skills form.';
+      } finally {
+        e.target.value = '';
+      }
     });
 
     ['sfsRedDate', 'sfsWhiteDate'].forEach(function (id) {
@@ -523,6 +513,7 @@
       var name = cleanName(document.getElementById('sfsSoldierName').value);
       var redDate = document.getElementById('sfsRedDate').value;
       var whiteDate = document.getElementById('sfsWhiteDate').value;
+
       if (!name || !redDate || !whiteDate) {
         status.style.color = '#E08B77';
         status.textContent = 'Soldier name and both phase dates are required.';
@@ -533,17 +524,25 @@
         status.textContent = 'White Phase date cannot be before Red Phase date.';
         return;
       }
+
       status.style.color = '';
-      status.textContent = 'Generating PDF…';
+      status.textContent = 'Generating official PDF…';
       button.disabled = true;
+      clearGeneratedPdf();
+
       try {
         var bytes = await makePdf({ rank: rank, name: name, redDate: redDate, whiteDate: whiteDate });
         storeGeneratedPdf(bytes, name);
-        status.textContent = 'PDF ready. Preview it before sharing or saving.';
+        status.textContent = 'Official PDF ready. Preview it before sharing or saving.';
       } catch (err) {
         console.error('Stripes for Skills generation failed', err);
         status.style.color = '#E08B77';
-        status.textContent = 'Could not generate the PDF. Reconnect once and try again.';
+        if (err && err.code === 'SFS_TEMPLATE_REQUIRED') {
+          status.textContent = 'Import the official blank Stripes for Skills PDF first.';
+          document.getElementById('sfsTemplateFile').click();
+        } else {
+          status.textContent = err && err.message ? err.message : 'Could not generate the PDF.';
+        }
       } finally {
         button.disabled = false;
       }
@@ -564,6 +563,7 @@
     injectStyles();
     var modal = ensureModal();
     var info = inferRankAndName(document.getElementById('f_name') ? document.getElementById('f_name').value : '');
+
     document.getElementById('sfsRank').value = info.rank;
     document.getElementById('sfsSoldierName').value = info.name;
     document.getElementById('sfsRedDate').value = '';
@@ -571,8 +571,10 @@
     document.getElementById('sfsRedPreview').textContent = 'JV/________';
     document.getElementById('sfsWhitePreview').textContent = 'JV/________';
     document.getElementById('sfsStatus').textContent = '';
+    document.getElementById('sfsStatus').style.color = '';
     clearGeneratedPdf();
     modal.classList.remove('hidden');
+    refreshTemplateStatus();
     setTimeout(function () { document.getElementById('sfsRedDate').focus(); }, 0);
   }
 
@@ -595,6 +597,8 @@
     inferRankAndName: inferRankAndName,
     initials: INITIALS,
     recruiterLine: RECRUITER_LINE,
+    templateStorageKey: TEMPLATE_STORAGE_KEY,
+    expectedTemplateFields: EXPECTED_TEMPLATE_FIELDS.slice(),
     tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; }),
     officialRedFields: OFFICIAL_RED_FIELDS.slice(),
     officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice()
