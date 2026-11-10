@@ -12,7 +12,7 @@
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
   var RANKS = ['PVT', 'PV2', 'PFC', 'SPC', 'CPL', 'SGT', 'SSG', 'SFC', 'MSG', '1SG', 'SGM', 'CSM'];
-  var pdfLibPromise = null;
+  var pdfLibPromise = null;\n  var generatedPdf = null;
 
   var TASKS = [
     { text: 'Esatblish Bank Account', phase: 'R' },
@@ -281,7 +281,7 @@
     TASKS.forEach(function (task, index) {
       var rowBottom = yTop - row;
       drawLine(page, left, rowBottom, right, rowBottom, 0.38);
-      var baseline = rowBottom + 2.35;
+      var baseline = rowBottom + 2.7;
       var font = task.group ? bold : regular;
       var x = 52;
       if (task.indent) {
@@ -292,10 +292,10 @@
         x = 65;
       }
       var max = split - x - 4;
-      var size = fitText(font, task.text, max, 6.2, 4.7);
+      var size = fitText(font, task.text, max, 7.0, 5.2);
       page.drawText(task.text, { x: x, y: baseline, size: size, font: font });
       var st = task.phase === 'W' ? whiteStamp : redStamp;
-      drawCellText(page, st, mono, 6.4, split, right, baseline);
+      drawCellText(page, st, regular, 5.26, completionLeft, completionRight, baseline + 0.1);
       yTop = rowBottom;
     });
 
@@ -319,7 +319,7 @@
       drawCellText(page, e.event, i === 0 || i === 1 || i === 2 || i === 3 || i === 4 || i === 5 ? bold : regular, 5.8, left, eventSplit, b);
       page.drawText(e.metric, { x: eventSplit + 3, y: b, size: 5.8, font: regular });
       page.drawText('Points:', { x: metricSplit + 3, y: b, size: 5.8, font: regular });
-      drawCellText(page, whiteStamp, mono, 6.4, split, right, b);
+      page.drawText(whiteStamp, { x: 399.8, y: b + 0.1, size: 5.26, font: regular });
     }
 
     yTop = acftHeaderBottom - (6 * row);
@@ -340,7 +340,7 @@
         tx = 83;
       }
       page.drawText(task.text, { x: tx, y: base, size: task.group ? 6.1 : 5.9, font: task.group ? bold : regular });
-      drawCellText(page, task.phase === 'W' ? whiteStamp : redStamp, mono, 6.4, split, right, base);
+      page.drawText(task.phase === 'W' ? whiteStamp : redStamp, { x: 399.8, y: base + 0.1, size: 5.26, font: regular });
       yTop = rb;
     });
 
@@ -369,6 +369,30 @@
     var PDFLib = await ensurePdfLib();
     var official = await fillOfficialTemplate(PDFLib, options);
     return official || makeFallbackPdf(PDFLib, options);
+  }
+
+  function clearGeneratedPdf() {
+    if (generatedPdf && generatedPdf.url) URL.revokeObjectURL(generatedPdf.url);
+    generatedPdf = null;
+    var actions = document.getElementById('sfsResultActions');
+    var preview = document.getElementById('sfsPreviewBtn');
+    if (actions) actions.classList.add('hidden');
+    if (preview) preview.removeAttribute('href');
+  }
+
+  function storeGeneratedPdf(bytes, name) {
+    clearGeneratedPdf();
+    var blob = new Blob([bytes], { type: 'application/pdf' });
+    generatedPdf = {
+      bytes: bytes,
+      name: name,
+      blob: blob,
+      url: URL.createObjectURL(blob)
+    };
+    var actions = document.getElementById('sfsResultActions');
+    var preview = document.getElementById('sfsPreviewBtn');
+    if (preview) preview.href = generatedPdf.url;
+    if (actions) actions.classList.remove('hidden');
   }
 
   async function shareOrDownload(bytes, name) {
@@ -416,6 +440,8 @@
       '.sfs-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:8px;margin-top:16px}',
       '.sfs-actions .btn{width:100%;margin:0}',
       '.sfs-status{min-height:1.2em;margin-top:8px;font-size:.76rem;color:var(--teal)}',
+      '.sfs-result-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}',
+      '.sfs-result-actions .btn{width:100%;margin:0;text-align:center;text-decoration:none}',
       '@media(min-width:600px){.sfs-modal{align-items:center}.sfs-panel{border-radius:12px}}'
     ].join('');
     document.head.appendChild(style);
@@ -467,7 +493,10 @@
       '</div>';
     document.body.appendChild(modal);
 
-    function close() { modal.classList.add('hidden'); }
+    function close() {
+      modal.classList.add('hidden');
+      clearGeneratedPdf();
+    }
     document.getElementById('sfsCloseBtn').addEventListener('click', close);
     document.getElementById('sfsCancelBtn').addEventListener('click', close);
     modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
