@@ -17,7 +17,7 @@ jobs:
 
       - name: Syntax-check JS modules
         run: |
-          for f in appointment-reminder.js pibase-util.js firebase-config.js events-ui.js kiosk-runtime.js pwa-runtime.js service-worker.js; do
+          for f in appointment-reminder.js pibase-util.js firebase-config.js events-ui.js kiosk-runtime.js pwa-runtime.js service-worker.js stripes-for-skills.js; do
             tmp="$(mktemp --suffix=.mjs)"
             cp "$f" "$tmp"
             node --check "$tmp"
