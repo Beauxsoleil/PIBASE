@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v25';
+const CACHE_NAME = 'pibase-app-v26';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -11,6 +11,7 @@ const APP_SHELL = [
   'styles.css',
   'firebase-config.js',
   'pibase-util.js',
+  'stripes-for-skills.js',
   'events-ui.js',
   'appointment-reminder.js',
   'kiosk-runtime.js',
@@ -30,6 +31,8 @@ const APP_SHELL = [
   'icons/pibase-maskable-512.png'
 ].map(scopeUrl);
 
+const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+
 const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js',
@@ -40,7 +43,7 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await Promise.all(APP_SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))));
-    await Promise.allSettled(FIREBASE_SDK.map(url => cache.add(new Request(url, { mode: 'cors', cache: 'reload' }))));
+    await Promise.allSettled([...FIREBASE_SDK, PDF_LIB_URL].map(url => cache.add(new Request(url, { mode: 'cors', cache: 'reload' }))));
   })());
 });
 
@@ -117,9 +120,14 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  if (url.origin === 'https://cdn.jsdelivr.net' && request.url === PDF_LIB_URL) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
   if (url.origin !== self.location.origin) return;
 
-  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
+  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|stripes-for-skills\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request).catch(() => caches.match(scopeUrl('offline.html'))));
     return;
