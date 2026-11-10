@@ -117,6 +117,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  if (url.origin === 'https://cdn.jsdelivr.net' && request.url === PDF_LIB_URL) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
   if (url.origin !== self.location.origin) return;
 
   const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
