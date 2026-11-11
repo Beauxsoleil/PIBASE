@@ -1169,8 +1169,16 @@
     templateStorageKey: TEMPLATE_STORAGE_KEY,
     expectedTemplateFields: EXPECTED_TEMPLATE_FIELDS.slice(),
     tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; }),
+    enlistmentFields: ENLISTMENT_FIELDS.slice(),
     officialRedFields: OFFICIAL_RED_FIELDS.slice(),
     officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice(),
+    aftFields: JSON.parse(JSON.stringify(AFT_FIELDS)),
+    aftEvents: AFT_EVENTS.slice(),
+    ageBand: ageBand,
+    timeToSeconds: timeToSeconds,
+    scoreEventWithData: scoreEventWithData,
+    scoreAftWithData: scoreAftWithData,
+    aftScoringUrl: AFT_SCORING_URL,
     openBatch: openBatch,
     jsZipUrl: JSZIP_URL
   };
