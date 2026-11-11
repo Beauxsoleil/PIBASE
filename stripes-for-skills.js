@@ -11,6 +11,8 @@
   var PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
   var JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
   var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
+  var AFT_SCORING_URL = './aft-scoring-data.json';
+  var AFT_SOURCE_SHA256 = '572a54ffce1a084bf935fc8e9ea80a316de7e6edc824d6d8517e8944872ad750';
   var TEMPLATE_STORAGE_KEY = 'pibase.sfs.officialTemplate.v1';
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
@@ -21,38 +23,39 @@
   var generatedPdf = null;
   var batchApplicants = [];
   var templateState = null;
+  var aftDataPromise = null;
 
-  var OFFICIAL_RED_FIELDS = [
+  var ENLISTMENT_FIELDS = [
     'InitialsDate of CompletionEsatblish Bank Account',
     'InitialsDate of CompletionStart Direct Deposit',
     'InitialsDate of CompletionSet up AKO Account',
-    'InitialsDate of CompletionSet up MyPay Account',
+    'InitialsDate of CompletionSet up MyPay Account'
+  ];
+
+  // The current completed checklist leaves section-heading boxes blank and
+  // dates the individual tasks. Keep that spacing rather than filling every
+  // available AcroForm field.
+  var OFFICIAL_RED_FIELDS = [
     'InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills',
-    'InitialsDate of CompletionDrill and Ceremony STRM Red Phase',
     'InitialsDate of CompletionExecute the Position of Attention',
     'InitialsDate of CompletionExecute the Hand Salute',
     'InitialsDate of CompletionKnow Who and When to Salute',
-    'InitialsDate of CompletionExecute Rest Positions While at the Halt STRM Red Phase',
     'InitialsDate of CompletionParade Rest',
     'InitialsDate of CompletionStand at Ease',
     'InitialsDate of CompletionAt Ease',
     'InitialsDate of CompletionRest',
-    'InitialsDate of CompletionExecute Facing Movements While at the Halt STRM Red Phase',
     'InitialsDate of CompletionRight Face',
     'InitialsDate of CompletionLeft Face',
     'InitialsDate of CompletionAbout Face',
-    'InitialsDate of CompletionMarching STRM Red Phase',
     'InitialsDate of CompletionForward March',
     'InitialsDate of CompletionHalf Step',
     'InitialsDate of CompletionChange Step',
     'InitialsDate of CompletionColumn Left STRM White Phase',
     'InitialsDate of CompletionColumn Right STRM White Phase',
     'InitialsDate of CompletionHalt',
-    'InitialsDate of CompletionIdenitfy Rank Structure STRM Red Phase',
     'InitialsDate of CompletionEnlisted Ranks',
     'InitialsDate of CompletionOfficer Ranks',
     'InitialsDate of CompletionWarrant Officer Ranks',
-    'InitialsDate of CompletionPhonetic Alphabet STRM Red Phase',
     'InitialsDate of CompletionKnow  Recite Phonetic Alphabet',
     'Identify Terrain Features on a Map',
     'Determine Grid Coordinates on a Map',
@@ -61,66 +64,51 @@
   ];
 
   var OFFICIAL_WHITE_FIELDS = [
-    'InitialsDate of CompletionRecite General Orders STRM White Phase Stripes for Skills',
     'InitialsDate of CompletionFirst General Order',
     'InitialsDate of CompletionSecond General Order',
     'InitialsDate of CompletionThird General Order',
-    'InitialsDate of CompletionFirst AidCLS STRM White Phase',
     'InitialsDate of CompletionEvaluate a Casualty',
     'InitialsDate of CompletionPerform First Aid and Prctice Individual Preventative Medicine Countermeasures',
     'InitialsDate of CompletionPerform First Aid for Bleeding Extremity',
-    'InitialsDate of CompletionPerform First Aid for Splinting a Fracture',
-    'Points', 'Points_2', 'Points_3', 'Points_4', 'Points_5', 'Points_6',
-    'Land Navigation'
+    'InitialsDate of CompletionPerform First Aid for Splinting a Fracture'
   ];
 
+  // This is still the legacy six-row ACFT artwork. The current AFT uses five
+  // events, so the Standing Power Throw row (Meters / Points_2) stays blank.
+  var AFT_FIELDS = {
+    MDL: { raw: 'LBS', score: 'Text1', date: 'Points' },
+    HRP: { raw: 'Repitions', score: 'Text3', date: 'Points_3' },
+    SDC: { raw: 'Min  Sec', score: 'Text4', date: 'Points_4' },
+    PLK: { raw: 'Repitions_2', score: 'Text2', date: 'Points_5' },
+    '2MR': { raw: 'Min  Sec_2', score: 'Text5', date: 'Points_6' }
+  };
+  var AFT_EVENTS = ['MDL','HRP','SDC','PLK','2MR'];
+
   var EXPECTED_TEMPLATE_FIELDS = [
-    'Date',
-    'NAME  RANK',
-    'PLATOON SGTUNIT'
-  ].concat(OFFICIAL_RED_FIELDS, OFFICIAL_WHITE_FIELDS);
+    'Date', 'NAME  RANK', 'PLATOON SGTUNIT', 'Meters', 'Points_2'
+  ].concat(
+    ENLISTMENT_FIELDS,
+    OFFICIAL_RED_FIELDS,
+    OFFICIAL_WHITE_FIELDS,
+    AFT_EVENTS.flatMap(function (event) {
+      var fields = AFT_FIELDS[event];
+      return [fields.raw, fields.score, fields.date];
+    })
+  );
 
   var TASKS = [
-    { text: 'Esatblish Bank Account', phase: 'R' },
-    { text: 'Start Direct Deposit', phase: 'R' },
-    { text: 'Set up AKO Account', phase: 'R' },
-    { text: 'Set up MyPay Account', phase: 'R' },
+    { text: 'Esatblish Bank Account', phase: 'E' },
+    { text: 'Start Direct Deposit', phase: 'E' },
+    { text: 'Set up AKO Account', phase: 'E' },
+    { text: 'Set up MyPay Account', phase: 'E' },
     { text: 'Military Time (STRM White Phase Stripes for Skills)', phase: 'R' },
-    { text: 'Drill and Ceremony (STRM Red Phase)', phase: 'R' },
-    { text: 'Execute the Position of Attention', phase: 'R' },
-    { text: 'Execute the Hand Salute', phase: 'R' },
-    { text: 'Know Who and When to Salute', phase: 'R' },
-    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R' },
-    { text: 'Parade Rest', phase: 'R' },
-    { text: 'Stand at Ease', phase: 'R' },
-    { text: 'At Ease', phase: 'R' },
-    { text: 'Rest', phase: 'R' },
-    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R' },
-    { text: 'Right Face', phase: 'R' },
-    { text: 'Left Face', phase: 'R' },
-    { text: 'About Face', phase: 'R' },
-    { text: 'Marching (STRM Red Phase)', phase: 'R' },
-    { text: 'Forward March', phase: 'R' },
-    { text: 'Half Step', phase: 'R' },
-    { text: 'Change Step', phase: 'R' },
+    { text: 'Drill and Ceremony tasks', phase: 'R' },
     { text: 'Column Left (STRM White Phase)', phase: 'R' },
     { text: 'Column Right (STRM White Phase)', phase: 'R' },
-    { text: 'Halt', phase: 'R' },
-    { text: 'Recite General Orders (STRM White Phase Stripes for Skills)', phase: 'W' },
-    { text: 'First General Order', phase: 'W' },
-    { text: 'Second General Order', phase: 'W' },
-    { text: 'Third General Order', phase: 'W' },
-    { text: 'Idenitfy Rank Structure (STRM Red Phase)', phase: 'R' },
-    { text: 'Enlisted Ranks', phase: 'R' },
-    { text: 'Officer Ranks', phase: 'R' },
-    { text: 'Warrant Officer Ranks', phase: 'R' },
-    { text: 'Phonetic Alphabet (STRM Red Phase)', phase: 'R' },
-    { text: 'Know / Recite Phonetic Alphabet', phase: 'R' },
-    { text: 'First Aid/CLS (STRM White Phase)', phase: 'W' },
-    { text: 'Evaluate a Casualty', phase: 'W' },
-    { text: 'Perform First Aid and Prctice Individual Preventative Medicine Countermeasures', phase: 'W' },
-    { text: 'Perform First Aid for Bleeding Extremity', phase: 'W' },
-    { text: 'Perform First Aid for Splinting a Fracture', phase: 'W' }
+    { text: 'General Orders tasks', phase: 'W' },
+    { text: 'Rank Structure tasks', phase: 'R' },
+    { text: 'Phonetic Alphabet task', phase: 'R' },
+    { text: 'First Aid/CLS tasks', phase: 'W' }
   ];
 
   function ymd(dateValue) {
@@ -149,6 +137,96 @@
       if (upper.indexOf(rank + ' ') === 0) return { rank: rank, name: name.slice(rank.length).trim() };
     }
     return { rank: 'PVT', name: name };
+  }
+
+  function ageBand(age) {
+    var n = Number(age);
+    if (!Number.isFinite(n) || n < 17) return null;
+    if (n <= 21) return '17-21';
+    if (n <= 26) return '22-26';
+    if (n <= 31) return '27-31';
+    if (n <= 36) return '32-36';
+    if (n <= 41) return '37-41';
+    if (n <= 46) return '42-46';
+    if (n <= 51) return '47-51';
+    if (n <= 56) return '52-56';
+    if (n <= 61) return '57-61';
+    return '62+';
+  }
+
+  function timeToSeconds(value) {
+    var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    var minutes = Number(match[1]), seconds = Number(match[2]);
+    if (seconds > 59) return null;
+    return minutes * 60 + seconds;
+  }
+
+  function rawNumericValue(event, value) {
+    if (event === 'MDL' || event === 'HRP') {
+      var n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+    return timeToSeconds(value);
+  }
+
+  function thresholdNumericValue(event, value) {
+    return rawNumericValue(event, value);
+  }
+
+  function scoreEventWithData(data, event, raw, age, sex, standard) {
+    var band = ageBand(age);
+    var eventData = data && data.events && data.events[event];
+    if (!band || !eventData) return null;
+    var columnSex = standard === 'combat' ? 'M' : String(sex || '').toUpperCase();
+    if (columnSex !== 'M' && columnSex !== 'F') return null;
+    var rows = eventData.columns && eventData.columns[band] && eventData.columns[band][columnSex];
+    var value = rawNumericValue(event, raw);
+    if (!rows || value === null) return null;
+
+    for (var i = 0; i < rows.length; i++) {
+      var points = Number(rows[i][0]);
+      var threshold = thresholdNumericValue(event, rows[i][1]);
+      if (threshold === null) continue;
+      if (eventData.direction === 'higher' ? value >= threshold : value <= threshold) return points;
+    }
+    return 0;
+  }
+
+  function scoreAftWithData(data, options) {
+    var raw = options && options.raw || {};
+    var scores = {};
+    var complete = true;
+    AFT_EVENTS.forEach(function (event) {
+      var points = scoreEventWithData(data, event, raw[event], options.age, options.sex, options.standard);
+      scores[event] = points;
+      if (points === null) complete = false;
+    });
+    if (!complete) return { complete: false, scores: scores, total: null, pass: false };
+    var total = AFT_EVENTS.reduce(function (sum, event) { return sum + scores[event]; }, 0);
+    var target = options.standard === 'combat' ? 350 : 300;
+    var pass = total >= target && AFT_EVENTS.every(function (event) { return scores[event] >= 60; });
+    return { complete: true, scores: scores, total: total, target: target, pass: pass };
+  }
+
+  function loadAftData() {
+    if (aftDataPromise) return aftDataPromise;
+    aftDataPromise = fetch(AFT_SCORING_URL, { cache: 'force-cache' }).then(function (response) {
+      if (!response.ok) throw new Error('AFT scoring tables are unavailable.');
+      return response.json();
+    }).then(function (data) {
+      var expectedRows = { MDL:47, HRP:47, SDC:101, PLK:101, '2MR':101 };
+      var complete = data && data.version === '250601' && data.events &&
+        data.provenance && data.provenance.officialSha256 === AFT_SOURCE_SHA256 &&
+        AFT_EVENTS.every(function (event) {
+          var eventData = data.events[event];
+          return eventData && Array.isArray(eventData.publishedPointRows) &&
+            eventData.publishedPointRows.length === expectedRows[event];
+        });
+      if (!complete) throw new Error('AFT scoring table version is invalid or incomplete.');
+      return data;
+    });
+    return aftDataPromise;
   }
 
   function safeFilename(name) {
@@ -295,6 +373,7 @@
     var form = pdf.getForm();
     var font = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
     var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
+    var enlistmentStamp = stamp(options.enlistmentDate);
     var redStamp = stamp(options.redDate);
     var whiteStamp = stamp(options.whiteDate);
 
@@ -302,14 +381,26 @@
     setText(form, 'NAME  RANK', soldier, 8);
     setText(form, 'PLATOON SGTUNIT', RECRUITER_LINE, 9);
 
+    ENLISTMENT_FIELDS.forEach(function (name) { setText(form, name, enlistmentStamp, 7); });
     OFFICIAL_RED_FIELDS.forEach(function (name) { setText(form, name, redStamp, 7); });
     OFFICIAL_WHITE_FIELDS.forEach(function (name) { setText(form, name, whiteStamp, 7); });
 
-    // Force appearance streams before flattening. This avoids viewer-specific
-    // blank fields, black overlays, and inconsistent AcroForm rendering.
+    if (options.aft && options.aft.complete) {
+      var aftStamp = stamp(options.aft.date);
+      AFT_EVENTS.forEach(function (event) {
+        var fields = AFT_FIELDS[event];
+        setText(form, fields.raw, String(options.aft.raw[event]), 7);
+        setText(form, fields.score, String(options.aft.scores[event]), 7);
+        setText(form, fields.date, aftStamp, 7);
+      });
+    }
+
+    // The Standing Power Throw row is not part of the current five-event AFT.
+    setText(form, 'Meters', '', 7);
+    setText(form, 'Points_2', '', 7);
+
     form.updateFieldAppearances(font);
     form.flatten();
-
     return pdf.save({ useObjectStreams: false });
   }
 
@@ -397,8 +488,24 @@
       '.sfs-batch-row{display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:end;background:var(--bg-raised);border:1px solid var(--line);border-radius:5px;padding:8px}',
       '.sfs-batch-row label{margin:0 0 3px;font-size:.64rem}',
       '.sfs-batch-row select,.sfs-batch-row input{margin:0;min-height:40px}',
+      '.sfs-batch-full{grid-column:1/-1}',
+      '.sfs-batch-aft{grid-column:1/-1;border-top:1px solid var(--line);padding-top:7px}',
+      '.sfs-batch-aft summary{cursor:pointer;font-size:.7rem;font-weight:800}',
+      '.sfs-batch-aft-body{padding-top:8px}',
       '.sfs-progress{height:7px;background:var(--bg-raised);border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:8px}',
       '.sfs-progress>span{display:block;height:100%;width:0;background:var(--brass);transition:width .15s ease}',
+      '.sfs-aft{margin-top:14px;border:1px solid var(--line);border-radius:6px;background:var(--bg-raised);overflow:hidden}',
+      '.sfs-aft>summary{cursor:pointer;padding:11px 12px;font-weight:800;font-size:.78rem}',
+      '.sfs-aft-body{padding:0 12px 12px}',
+      '.sfs-aft-toggle{display:flex;align-items:center;gap:9px;margin:10px 0;font-size:.76rem;font-weight:700}',
+      '.sfs-aft-toggle input{width:20px;height:20px;margin:0;accent-color:var(--brass)}',
+      '.sfs-aft-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+      '.sfs-aft-event{display:grid;grid-template-columns:1.35fr 1fr 54px;gap:8px;align-items:end;margin-top:7px}',
+      '.sfs-aft-event label{margin:0;font-size:.66rem}',
+      '.sfs-aft-event input{margin:0;min-height:40px}',
+      '.sfs-aft-points{min-height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font-family:var(--font-mono);font-weight:800}',
+      '.sfs-aft-summary{margin-top:10px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-family:var(--font-mono);font-size:.74rem}',
+      '@media(max-width:460px){.sfs-aft-meta{grid-template-columns:1fr}.sfs-aft-event{grid-template-columns:1fr 86px 50px}}',
       '@media(min-width:600px){.sfs-modal{align-items:center}.sfs-panel{border-radius:12px}}'
     ].join('');
     document.head.appendChild(style);
@@ -464,6 +571,80 @@
     button.disabled = false;
   }
 
+  function singleAftRaw() {
+    return {
+      MDL: document.getElementById('sfsAftMDL').value.trim(),
+      HRP: document.getElementById('sfsAftHRP').value.trim(),
+      SDC: document.getElementById('sfsAftSDC').value.trim(),
+      PLK: document.getElementById('sfsAftPLK').value.trim(),
+      '2MR': document.getElementById('sfsAft2MR').value.trim()
+    };
+  }
+
+  function setSingleAftPointLabels(result) {
+    AFT_EVENTS.forEach(function (event) {
+      var el = document.getElementById('sfsAft' + event.replace('2MR','2MR') + 'Points');
+      if (el) el.textContent = result && result.scores[event] !== null ? String(result.scores[event]) : '—';
+    });
+    var summary = document.getElementById('sfsAftSummary');
+    if (!summary) return;
+    if (!result || !result.complete) {
+      summary.textContent = 'Enter all five AFT event results to calculate points.';
+      return;
+    }
+    summary.textContent = 'Total ' + result.total + ' / 500 • ' + (result.pass ? 'MEETS ' : 'DOES NOT MEET ') + (result.target === 350 ? 'COMBAT 350' : 'GENERAL 300') + ' STANDARD';
+  }
+
+  async function refreshSingleAftScores() {
+    var include = document.getElementById('sfsIncludeAft');
+    if (!include || !include.checked) {
+      setSingleAftPointLabels(null);
+      return null;
+    }
+    try {
+      var data = await loadAftData();
+      var result = scoreAftWithData(data, {
+        raw: singleAftRaw(),
+        age: document.getElementById('sfsAftAge').value,
+        sex: document.getElementById('sfsAftSex').value,
+        standard: document.getElementById('sfsAftStandard').value
+      });
+      setSingleAftPointLabels(result);
+      return result;
+    } catch (err) {
+      var summary = document.getElementById('sfsAftSummary');
+      if (summary) summary.textContent = 'AFT scoring table unavailable.';
+      return null;
+    }
+  }
+
+  async function collectSingleAft() {
+    if (!document.getElementById('sfsIncludeAft').checked) return null;
+    var date = document.getElementById('sfsAftDate').value;
+    var age = Number(document.getElementById('sfsAftAge').value);
+    var sex = document.getElementById('sfsAftSex').value;
+    var standard = document.getElementById('sfsAftStandard').value;
+    var raw = singleAftRaw();
+    if (!date || !Number.isFinite(age) || age < 17 || !sex || AFT_EVENTS.some(function (event) { return !raw[event]; })) {
+      throw new Error('For AFT scoring, enter test date, age, sex, and all five event results.');
+    }
+    var data = await loadAftData();
+    var result = scoreAftWithData(data, { raw: raw, age: age, sex: sex, standard: standard });
+    if (!result.complete) throw new Error('One or more AFT results are not in a valid format. Use m:ss for timed events.');
+    return {
+      complete: true,
+      date: date,
+      age: age,
+      sex: sex,
+      standard: standard,
+      raw: raw,
+      scores: result.scores,
+      total: result.total,
+      target: result.target,
+      pass: result.pass
+    };
+  }
+
   function ensureModal() {
     var modal = document.getElementById('sfsModal');
     if (modal) return modal;
@@ -477,13 +658,25 @@
     modal.innerHTML = '' +
       '<div class="sfs-panel">' +
         '<div class="sfs-head"><div><div class="eyebrow">RSP DOCUMENT</div><h2 id="sfsTitle">Stripes for Skills</h2></div><button class="sfs-close" id="sfsCloseBtn" type="button" aria-label="Close">×</button></div>' +
-        '<div class="helper">PIBASE uses the official Army PDF, fills the selected Soldier and phase dates, then flattens the form for reliable viewing and printing.</div>' +
-        '<div class="sfs-template-card"><div><strong id="sfsTemplateStatus">Checking official template…</strong><span id="sfsTemplateDetail">One-time setup on this device.</span></div><button class="btn btn-secondary" id="sfsTemplateBtn" type="button">Import PDF</button></div>' +
+        '<div class="helper">Uses the official Army checklist. Enlistment stamps the first four onboarding tasks; Red and White stamp the phase tasks. AFT scores are optional.</div>' +
+        '<div class="sfs-template-card"><div><strong id="sfsTemplateStatus">Checking official template…</strong><span id="sfsTemplateDetail">Built-in form verification.</span></div><button class="btn btn-secondary" id="sfsTemplateBtn" type="button">Import PDF</button></div>' +
         '<input id="sfsTemplateFile" class="hidden" type="file" accept="application/pdf">' +
         '<label for="sfsRank">Rank</label><select id="sfsRank">' + RANKS.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select>' +
         '<label for="sfsSoldierName">Soldier name</label><input id="sfsSoldierName" type="text" autocomplete="off">' +
+        '<label for="sfsEnlistmentDate">Enlistment date</label><input id="sfsEnlistmentDate" type="date">' +
         '<div class="field-row"><div><label for="sfsRedDate">Red Phase date</label><input id="sfsRedDate" type="date"></div><div><label for="sfsWhiteDate">White Phase date</label><input id="sfsWhiteDate" type="date"></div></div>' +
-        '<div class="sfs-stamp"><div>Red: <span id="sfsRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsWhitePreview">JV/________</span></div><div style="margin-top:4px;color:var(--text-muted)">Recruiter: ' + RECRUITER_LINE + '</div></div>' +
+        '<div class="sfs-stamp"><div>Enlistment: <span id="sfsEnlistmentPreview">JV/________</span></div><div style="margin-top:4px">Red: <span id="sfsRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsWhitePreview">JV/________</span></div><div style="margin-top:4px;color:var(--text-muted)">Recruiter: ' + RECRUITER_LINE + '</div></div>' +
+        '<details class="sfs-aft" id="sfsAftDetails"><summary>AFT scores (optional)</summary><div class="sfs-aft-body">' +
+          '<label class="sfs-aft-toggle"><input id="sfsIncludeAft" type="checkbox"> Fill the five current AFT events and calculate points</label>' +
+          '<div class="sfs-aft-meta"><div><label for="sfsAftDate">AFT test date</label><input id="sfsAftDate" type="date"></div><div><label for="sfsAftAge">Age on test date</label><input id="sfsAftAge" type="number" min="17" max="100" inputmode="numeric"></div><div><label for="sfsAftSex">Sex for scoring</label><select id="sfsAftSex"><option value="M">Male</option><option value="F">Female</option></select></div><div><label for="sfsAftStandard">AFT standard</label><select id="sfsAftStandard"><option value="general">General (300)</option><option value="combat">Combat (350, sex-neutral)</option></select></div></div>' +
+          '<div class="helper" style="margin-top:8px">Current AFT: MDL, HRP, SDC, Plank, 2MR. The old Standing Power Throw row stays blank.</div>' +
+          '<div class="sfs-aft-event"><label>3RM Deadlift (lb)<input id="sfsAftMDL" type="number" min="0" step="10" inputmode="numeric"></label><div></div><div class="sfs-aft-points" id="sfsAftMDLPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>Hand-Release Push-Up (reps)<input id="sfsAftHRP" type="number" min="0" step="1" inputmode="numeric"></label><div></div><div class="sfs-aft-points" id="sfsAftHRPPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>Sprint-Drag-Carry<input id="sfsAftSDC" type="text" inputmode="numeric" placeholder="1:53"></label><div></div><div class="sfs-aft-points" id="sfsAftSDCPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>Plank<input id="sfsAftPLK" type="text" inputmode="numeric" placeholder="2:08"></label><div></div><div class="sfs-aft-points" id="sfsAftPLKPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>2-Mile Run<input id="sfsAft2MR" type="text" inputmode="numeric" placeholder="18:03"></label><div></div><div class="sfs-aft-points" id="sfsAft2MRPoints">—</div></div>' +
+          '<div class="sfs-aft-summary" id="sfsAftSummary">Enter all five AFT event results to calculate points.</div>' +
+        '</div></details>' +
         '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate Official PDF</button></div>' +
         '<div class="sfs-status" id="sfsStatus"></div>' +
         '<div class="sfs-result-actions hidden" id="sfsResultActions"><a class="btn btn-secondary" id="sfsPreviewBtn" target="_blank" rel="noopener">Preview PDF</a><button class="btn btn-primary" id="sfsShareBtn" type="button">Share / Save</button></div>' +
@@ -503,24 +696,21 @@
     });
 
     document.getElementById('sfsTemplateBtn').addEventListener('click', function () {
-      document.getElementById('sfsTemplateFile').click();
+      if (!this.disabled) document.getElementById('sfsTemplateFile').click();
     });
-
     document.getElementById('sfsTemplateFile').addEventListener('change', async function (e) {
       var file = e.target.files && e.target.files[0];
       var status = document.getElementById('sfsStatus');
       if (!file) return;
-
       status.style.color = '';
       status.textContent = 'Validating official form…';
       try {
         var template = await saveImportedTemplate(file);
-        status.textContent = 'Official template saved. You will not need to import it again on this device.';
+        status.textContent = 'Official template saved on this device.';
         document.getElementById('sfsTemplateStatus').textContent = 'Official template ready';
         document.getElementById('sfsTemplateDetail').textContent = 'Saved on this device • ' + template.fieldCount + ' fields verified';
         document.getElementById('sfsTemplateBtn').textContent = 'Replace';
       } catch (err) {
-        console.error('Stripes template import failed', err);
         status.style.color = '#E08B77';
         status.textContent = err && err.message ? err.message : 'That PDF is not the expected Stripes for Skills form.';
       } finally {
@@ -528,13 +718,24 @@
       }
     });
 
-    ['sfsRedDate', 'sfsWhiteDate'].forEach(function (id) {
+    ['sfsEnlistmentDate','sfsRedDate','sfsWhiteDate'].forEach(function (id) {
       document.getElementById(id).addEventListener('input', function () {
+        var enlist = document.getElementById('sfsEnlistmentDate').value;
         var red = document.getElementById('sfsRedDate').value;
         var white = document.getElementById('sfsWhiteDate').value;
+        document.getElementById('sfsEnlistmentPreview').textContent = enlist ? stamp(enlist) : 'JV/________';
         document.getElementById('sfsRedPreview').textContent = red ? stamp(red) : 'JV/________';
         document.getElementById('sfsWhitePreview').textContent = white ? stamp(white) : 'JV/________';
       });
+    });
+
+    document.getElementById('sfsIncludeAft').addEventListener('change', function () {
+      if (this.checked) document.getElementById('sfsAftDetails').open = true;
+      refreshSingleAftScores();
+    });
+    ['sfsAftAge','sfsAftSex','sfsAftStandard','sfsAftMDL','sfsAftHRP','sfsAftSDC','sfsAftPLK','sfsAft2MR'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', refreshSingleAftScores);
+      document.getElementById(id).addEventListener('change', refreshSingleAftScores);
     });
 
     document.getElementById('sfsGenerateBtn').addEventListener('click', async function () {
@@ -542,12 +743,18 @@
       var button = document.getElementById('sfsGenerateBtn');
       var rank = document.getElementById('sfsRank').value;
       var name = cleanName(document.getElementById('sfsSoldierName').value);
+      var enlistmentDate = document.getElementById('sfsEnlistmentDate').value;
       var redDate = document.getElementById('sfsRedDate').value;
       var whiteDate = document.getElementById('sfsWhiteDate').value;
 
-      if (!name || !redDate || !whiteDate) {
+      if (!name || !enlistmentDate || !redDate || !whiteDate) {
         status.style.color = '#E08B77';
-        status.textContent = 'Soldier name and both phase dates are required.';
+        status.textContent = 'Soldier name, enlistment date, Red Phase date, and White Phase date are required.';
+        return;
+      }
+      if (redDate < enlistmentDate) {
+        status.style.color = '#E08B77';
+        status.textContent = 'Red Phase date cannot be before the enlistment date.';
         return;
       }
       if (whiteDate < redDate) {
@@ -562,15 +769,24 @@
       clearGeneratedPdf();
 
       try {
-        var bytes = await makePdf({ rank: rank, name: name, redDate: redDate, whiteDate: whiteDate });
+        var aft = await collectSingleAft();
+        var bytes = await makePdf({
+          rank: rank,
+          name: name,
+          enlistmentDate: enlistmentDate,
+          redDate: redDate,
+          whiteDate: whiteDate,
+          aft: aft
+        });
         storeGeneratedPdf(bytes, name);
-        status.textContent = 'Official PDF ready. Preview it before sharing or saving.';
+        status.textContent = aft
+          ? 'Official PDF ready • AFT ' + aft.total + '/500 (' + (aft.pass ? 'meets' : 'does not meet') + ' selected standard).'
+          : 'Official PDF ready. Preview it before sharing or saving.';
       } catch (err) {
         console.error('Stripes for Skills generation failed', err);
         status.style.color = '#E08B77';
         if (err && err.code === 'SFS_TEMPLATE_REQUIRED') {
-          status.textContent = 'Import the official blank Stripes for Skills PDF first.';
-          document.getElementById('sfsTemplateFile').click();
+          status.textContent = 'Official Stripes for Skills template is unavailable.';
         } else {
           status.textContent = err && err.message ? err.message : 'Could not generate the PDF.';
         }
@@ -594,21 +810,98 @@
     injectStyles();
     var modal = ensureModal();
     var info = inferRankAndName(document.getElementById('f_name') ? document.getElementById('f_name').value : '');
+    var applicantAge = document.getElementById('f_age') ? document.getElementById('f_age').value : '';
 
     document.getElementById('sfsRank').value = info.rank;
     document.getElementById('sfsSoldierName').value = info.name;
+    document.getElementById('sfsEnlistmentDate').value = '';
     document.getElementById('sfsRedDate').value = '';
     document.getElementById('sfsWhiteDate').value = '';
+    document.getElementById('sfsEnlistmentPreview').textContent = 'JV/________';
     document.getElementById('sfsRedPreview').textContent = 'JV/________';
     document.getElementById('sfsWhitePreview').textContent = 'JV/________';
+
+    document.getElementById('sfsIncludeAft').checked = false;
+    document.getElementById('sfsAftDetails').open = false;
+    document.getElementById('sfsAftDate').value = '';
+    document.getElementById('sfsAftAge').value = applicantAge || '';
+    document.getElementById('sfsAftSex').value = 'M';
+    document.getElementById('sfsAftStandard').value = 'general';
+    ['MDL','HRP','SDC','PLK','2MR'].forEach(function (event) {
+      document.getElementById('sfsAft' + event).value = '';
+    });
+    setSingleAftPointLabels(null);
+
     document.getElementById('sfsStatus').textContent = '';
     document.getElementById('sfsStatus').style.color = '';
     clearGeneratedPdf();
     modal.classList.remove('hidden');
     refreshTemplateStatus();
-    setTimeout(function () { document.getElementById('sfsRedDate').focus(); }, 0);
+    setTimeout(function () { document.getElementById('sfsEnlistmentDate').focus(); }, 0);
   }
 
+  function batchAftRaw(row) {
+    var raw = {};
+    AFT_EVENTS.forEach(function (event) {
+      var input = row.querySelector('[data-batch-aft-event="' + event + '"]');
+      raw[event] = input ? input.value.trim() : '';
+    });
+    return raw;
+  }
+
+  function setBatchAftLabels(row, result) {
+    AFT_EVENTS.forEach(function (event) {
+      var el = row.querySelector('[data-batch-aft-points="' + event + '"]');
+      if (el) el.textContent = result && result.scores[event] !== null ? String(result.scores[event]) : '—';
+    });
+    var summary = row.querySelector('[data-batch-aft-summary]');
+    if (!summary) return;
+    if (!result || !result.complete) {
+      summary.textContent = 'Enter all five results to calculate points.';
+      return;
+    }
+    summary.textContent = 'Total ' + result.total + '/500 • ' + (result.pass ? 'MEETS ' : 'DOES NOT MEET ') + (result.target === 350 ? 'COMBAT 350' : 'GENERAL 300');
+  }
+
+  async function refreshBatchAftRow(row) {
+    var include = row.querySelector('[data-batch-aft-include]');
+    if (!include || !include.checked) {
+      setBatchAftLabels(row, null);
+      return null;
+    }
+    try {
+      var data = await loadAftData();
+      var result = scoreAftWithData(data, {
+        raw: batchAftRaw(row),
+        age: row.querySelector('[data-batch-aft-age]').value,
+        sex: row.querySelector('[data-batch-aft-sex]').value,
+        standard: row.querySelector('[data-batch-aft-standard]').value
+      });
+      setBatchAftLabels(row, result);
+      return result;
+    } catch (_) {
+      var summary = row.querySelector('[data-batch-aft-summary]');
+      if (summary) summary.textContent = 'AFT scoring table unavailable.';
+      return null;
+    }
+  }
+
+  async function collectBatchAft(row) {
+    var include = row.querySelector('[data-batch-aft-include]');
+    if (!include || !include.checked) return null;
+    var date = row.querySelector('[data-batch-aft-date]').value;
+    var age = Number(row.querySelector('[data-batch-aft-age]').value);
+    var sex = row.querySelector('[data-batch-aft-sex]').value;
+    var standard = row.querySelector('[data-batch-aft-standard]').value;
+    var raw = batchAftRaw(row);
+    if (!date || !Number.isFinite(age) || age < 17 || !sex || AFT_EVENTS.some(function (event) { return !raw[event]; })) {
+      throw new Error('Each included AFT needs test date, age, sex, and all five event results.');
+    }
+    var data = await loadAftData();
+    var result = scoreAftWithData(data, { raw: raw, age: age, sex: sex, standard: standard });
+    if (!result.complete) throw new Error('One or more batch AFT results are invalid. Use m:ss for timed events.');
+    return { complete:true, date:date, age:age, sex:sex, standard:standard, raw:raw, scores:result.scores, total:result.total, target:result.target, pass:result.pass };
+  }
 
   function ensureBatchModal() {
     var modal = document.getElementById('sfsBatchModal');
@@ -623,7 +916,7 @@
     modal.innerHTML = '' +
       '<div class="sfs-panel">' +
         '<div class="sfs-head"><div><div class="eyebrow">BATCH DOCUMENTS</div><h2 id="sfsBatchTitle">Batch Stripes for Skills</h2></div><button class="sfs-close" id="sfsBatchCloseBtn" type="button" aria-label="Close">×</button></div>' +
-        '<div class="helper">One Red Phase date and one White Phase date will be applied to every selected Soldier. Confirm each rank before generating.</div>' +
+        '<div class="helper">Red and White dates are shared. Each Soldier gets their own enlistment date and optional AFT results.</div>' +
         '<div class="field-row"><div><label for="sfsBatchRedDate">Red Phase date</label><input id="sfsBatchRedDate" type="date"></div><div><label for="sfsBatchWhiteDate">White Phase date</label><input id="sfsBatchWhiteDate" type="date"></div></div>' +
         '<div class="sfs-stamp"><div>Red: <span id="sfsBatchRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsBatchWhitePreview">JV/________</span></div></div>' +
         '<div class="section-title" style="margin-top:14px">Selected Soldiers <span id="sfsBatchCount"></span></div>' +
@@ -670,75 +963,75 @@
         return;
       }
 
-      var rows = Array.from(document.querySelectorAll('#sfsBatchList .sfs-batch-row'));
-      var soldiers = rows.map(function (row) {
-        return {
-          id: row.dataset.id || '',
-          rank: row.querySelector('[data-batch-rank]').value,
-          name: cleanName(row.querySelector('[data-batch-name]').value)
-        };
-      }).filter(function (soldier) { return soldier.name; });
-      if (!soldiers.length) {
-        status.style.color = '#E08B77';
-        status.textContent = 'No valid Soldier names are selected.';
-        return;
-      }
-
       status.style.color = '';
-      status.textContent = 'Preparing official forms…';
-      progress.classList.remove('hidden');
-      progressBar.style.width = '0%';
+      status.textContent = 'Validating selected Soldiers…';
       button.disabled = true;
-
       try {
+        var rows = Array.from(document.querySelectorAll('#sfsBatchList .sfs-batch-row'));
+        var soldiers = [];
+        for (var r = 0; r < rows.length; r++) {
+          var row = rows[r];
+          var soldier = {
+            id: row.dataset.id || '',
+            rank: row.querySelector('[data-batch-rank]').value,
+            name: cleanName(row.querySelector('[data-batch-name]').value),
+            enlistmentDate: row.querySelector('[data-batch-enlistment]').value
+          };
+          if (!soldier.name || !soldier.enlistmentDate) throw new Error('Every selected Soldier needs a name and enlistment date.');
+          if (redDate < soldier.enlistmentDate) throw new Error(soldier.name + ': Red Phase cannot be before enlistment.');
+          soldier.aft = await collectBatchAft(row);
+          soldiers.push(soldier);
+        }
+        if (!soldiers.length) throw new Error('No valid Soldiers are selected.');
+
+        status.textContent = 'Preparing official forms…';
+        progress.classList.remove('hidden');
+        progressBar.style.width = '0%';
+
         var pair = await Promise.all([ensurePdfLib(), ensureJsZip()]);
         var PDFLib = pair[0];
         var JSZip = pair[1];
         var template = await getOfficialTemplate(PDFLib);
-        if (!template) {
-          var missing = new Error('Official Stripes for Skills template required.');
-          missing.code = 'SFS_TEMPLATE_REQUIRED';
-          throw missing;
-        }
+        if (!template) throw new Error('Official Stripes for Skills template required.');
 
         var zip = new JSZip();
         var usedNames = {};
         for (var i = 0; i < soldiers.length; i++) {
-          var soldier = soldiers[i];
-          status.textContent = 'Creating ' + (i + 1) + ' of ' + soldiers.length + ': ' + soldier.name;
+          var current = soldiers[i];
+          status.textContent = 'Creating ' + (i + 1) + ' of ' + soldiers.length + ': ' + current.name;
           var bytes = await fillOfficialTemplate(PDFLib, {
-            rank: soldier.rank,
-            name: soldier.name,
+            rank: current.rank,
+            name: current.name,
+            enlistmentDate: current.enlistmentDate,
             redDate: redDate,
-            whiteDate: whiteDate
+            whiteDate: whiteDate,
+            aft: current.aft
           });
-          var filename = safeFilename(soldier.name);
+          var filename = safeFilename(current.name);
           var key = filename.toLowerCase();
           if (usedNames[key]) {
             usedNames[key] += 1;
             filename = filename.replace(/\.pdf$/i, '_' + usedNames[key] + '.pdf');
-          } else {
-            usedNames[key] = 1;
-          }
+          } else usedNames[key] = 1;
           zip.file(filename, bytes);
           progressBar.style.width = Math.round(((i + 1) / soldiers.length) * 82) + '%';
         }
 
         status.textContent = 'Packaging ' + soldiers.length + ' PDFs…';
         var blob = await zip.generateAsync(
-          { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+          { type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } },
           function (meta) { progressBar.style.width = (82 + Math.round(meta.percent * 0.18)) + '%'; }
         );
         progressBar.style.width = '100%';
 
         var zipName = 'Stripes_for_Skills_Batch_' + todayYmd() + '.zip';
         var file = null;
-        try { file = new File([blob], zipName, { type: 'application/zip' }); } catch (_) {}
+        try { file = new File([blob], zipName, { type:'application/zip' }); } catch (_) {}
         var shared = false;
         if (file && navigator.share && navigator.canShare) {
           try {
-            if (navigator.canShare({ files: [file] })) {
-              await navigator.share({ files: [file], title: 'Stripes for Skills batch' });
+            if (navigator.canShare({ files:[file] })) {
+              await navigator.share({ files:[file], title:'Stripes for Skills batch' });
               shared = true;
             }
           } catch (err) {
@@ -756,10 +1049,7 @@
           link.remove();
           setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
         }
-
-        status.textContent = shared
-          ? soldiers.length + ' official PDFs created and shared.'
-          : soldiers.length + ' official PDFs created in one ZIP.';
+        status.textContent = shared ? soldiers.length + ' official PDFs created and shared.' : soldiers.length + ' official PDFs created in one ZIP.';
       } catch (err) {
         console.error('Batch Stripes generation failed', err);
         status.style.color = '#E08B77';
@@ -777,9 +1067,7 @@
     list.innerHTML = '';
     records.forEach(function (record, index) {
       var parsed = inferRankAndName(record && record.name ? record.name : '');
-      var rank = RANKS.indexOf(String(record && record.rank || '').toUpperCase()) >= 0
-        ? String(record.rank).toUpperCase()
-        : parsed.rank;
+      var rank = RANKS.indexOf(String(record && record.rank || '').toUpperCase()) >= 0 ? String(record.rank).toUpperCase() : parsed.rank;
       var row = document.createElement('div');
       row.className = 'sfs-batch-row';
       row.dataset.id = String(record && record.id || index);
@@ -788,7 +1076,7 @@
       var rankLabel = document.createElement('label');
       rankLabel.textContent = 'Rank';
       var select = document.createElement('select');
-      select.setAttribute('data-batch-rank', '1');
+      select.setAttribute('data-batch-rank','1');
       RANKS.forEach(function (value) {
         var option = document.createElement('option');
         option.value = value;
@@ -804,24 +1092,53 @@
       nameLabel.textContent = 'Soldier ' + (index + 1);
       var input = document.createElement('input');
       input.type = 'text';
-      input.setAttribute('data-batch-name', '1');
+      input.setAttribute('data-batch-name','1');
       input.value = parsed.name || cleanName(record && record.name || '');
       nameWrap.appendChild(nameLabel);
       nameWrap.appendChild(input);
 
+      var enlistWrap = document.createElement('div');
+      enlistWrap.className = 'sfs-batch-full';
+      var enlistLabel = document.createElement('label');
+      enlistLabel.textContent = 'Enlistment date';
+      var enlistInput = document.createElement('input');
+      enlistInput.type = 'date';
+      enlistInput.setAttribute('data-batch-enlistment','1');
+      enlistWrap.appendChild(enlistLabel);
+      enlistWrap.appendChild(enlistInput);
+
+      var aft = document.createElement('details');
+      aft.className = 'sfs-batch-aft';
+      aft.innerHTML = '<summary>AFT scores (optional)</summary><div class="sfs-batch-aft-body">' +
+        '<label class="sfs-aft-toggle"><input type="checkbox" data-batch-aft-include> Fill AFT scores and points</label>' +
+        '<div class="sfs-aft-meta"><div><label>AFT test date</label><input type="date" data-batch-aft-date></div><div><label>Age</label><input type="number" min="17" max="100" data-batch-aft-age></div><div><label>Sex</label><select data-batch-aft-sex><option value="M">Male</option><option value="F">Female</option></select></div><div><label>Standard</label><select data-batch-aft-standard><option value="general">General (300)</option><option value="combat">Combat (350)</option></select></div></div>' +
+        '<div class="sfs-aft-event"><label>MDL lb<input type="number" min="0" step="10" data-batch-aft-event="MDL"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="MDL">—</div></div>' +
+        '<div class="sfs-aft-event"><label>HRP reps<input type="number" min="0" step="1" data-batch-aft-event="HRP"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="HRP">—</div></div>' +
+        '<div class="sfs-aft-event"><label>SDC<input type="text" placeholder="1:53" data-batch-aft-event="SDC"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="SDC">—</div></div>' +
+        '<div class="sfs-aft-event"><label>Plank<input type="text" placeholder="2:08" data-batch-aft-event="PLK"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="PLK">—</div></div>' +
+        '<div class="sfs-aft-event"><label>2MR<input type="text" placeholder="18:03" data-batch-aft-event="2MR"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="2MR">—</div></div>' +
+        '<div class="sfs-aft-summary" data-batch-aft-summary>Enter all five results to calculate points.</div></div>';
+      var ageInput = aft.querySelector('[data-batch-aft-age]');
+      ageInput.value = record && record.age ? record.age : '';
+      aft.addEventListener('input', function () { refreshBatchAftRow(row); });
+      aft.addEventListener('change', function () {
+        var include = row.querySelector('[data-batch-aft-include]');
+        if (include && include.checked) aft.open = true;
+        refreshBatchAftRow(row);
+      });
+
       row.appendChild(rankWrap);
       row.appendChild(nameWrap);
+      row.appendChild(enlistWrap);
+      row.appendChild(aft);
       list.appendChild(row);
     });
     document.getElementById('sfsBatchCount').textContent = '(' + records.length + ')';
   }
 
   function openBatch(records) {
-    var clean = Array.isArray(records) ? records.filter(function (record) {
-      return record && cleanName(record.name);
-    }) : [];
+    var clean = Array.isArray(records) ? records.filter(function (record) { return record && cleanName(record.name); }) : [];
     if (!clean.length) return false;
-
     injectStyles();
     ensureBatchModal();
     batchApplicants = clean.slice();
@@ -861,8 +1178,16 @@
     templateStorageKey: TEMPLATE_STORAGE_KEY,
     expectedTemplateFields: EXPECTED_TEMPLATE_FIELDS.slice(),
     tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; }),
+    enlistmentFields: ENLISTMENT_FIELDS.slice(),
     officialRedFields: OFFICIAL_RED_FIELDS.slice(),
     officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice(),
+    aftFields: JSON.parse(JSON.stringify(AFT_FIELDS)),
+    aftEvents: AFT_EVENTS.slice(),
+    ageBand: ageBand,
+    timeToSeconds: timeToSeconds,
+    scoreEventWithData: scoreEventWithData,
+    scoreAftWithData: scoreAftWithData,
+    aftScoringUrl: AFT_SCORING_URL,
     openBatch: openBatch,
     jsZipUrl: JSZIP_URL
   };

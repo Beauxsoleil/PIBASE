@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v32';
+const CACHE_NAME = 'pibase-app-v34';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -18,6 +18,7 @@ const APP_SHELL = [
   'assets/boudreaux-sprites.webp',
   'assets/thibideaux-sprites.webp',
   'assets/stripes-for-skills-template.pdf',
+  'aft-scoring-data.json',
   'boudreaux-kiosk.js',
   'thibodeaux-kiosk.js',
   'boudreaux-mobile.js',
@@ -129,7 +130,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|stripes-for-skills\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js)$/.test(url.pathname);
+  const isAppCode = /\/(?:index\.html|display\.html|events\.html|offline\.html|appointment-reminder\.js|firebase-config\.js|pibase-util\.js|stripes-for-skills\.js|events-ui\.js|kiosk-runtime\.js|pwa-runtime\.js|aft-scoring-data\.json)$/.test(url.pathname);
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request).catch(() => caches.match(scopeUrl('offline.html'))));
     return;
