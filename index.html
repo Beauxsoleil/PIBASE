@@ -282,7 +282,7 @@
     const selected=applicants.filter(a=>batchSfsSelected.has(a.id)&&a.name);
     if(!selected.length)return;
     if(!window.__PIBASE_SFS__||typeof window.__PIBASE_SFS__.openBatch!=='function'){alert('The Stripes generator is still loading. Refresh PIBASE and try again.');return;}
-    window.__PIBASE_SFS__.openBatch(selected.map(a=>({id:a.id,name:a.name,rank:a.rank||''})));
+    window.__PIBASE_SFS__.openBatch(selected.map(a=>({id:a.id,name:a.name,rank:a.rank||'',age:a.age??''})));
   });
   document.getElementById('folderNav').addEventListener('click',e=>{const button=e.target.closest('[data-folder]');if(!button)return;batchSfsMode=false;batchSfsSelected.clear();currentFolder=button.dataset.folder;renderList();});
   sortMode.addEventListener('change',renderList);document.getElementById('addBtn').addEventListener('click',()=>openDetail(null));document.getElementById('backBtn').addEventListener('click',()=>{showScreen('list');currentId=null;});
