@@ -75,7 +75,9 @@ assert.strictEqual(api.scoreEventWithData(aftData,'MDL','345',25,'M','general'),
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','230',25,'F','general'),100);
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','120',25,'F','general'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','150',25,'F','combat'),60);
+assert.strictEqual(api.scoreEventWithData(aftData,'SDC','1:32',25,'M','general'),99);
 assert.strictEqual(api.scoreEventWithData(aftData,'SDC','2:31',25,'M','general'),60);
+assert.strictEqual(api.scoreEventWithData(aftData,'2MR','13:47',25,'M','general'),99);
 assert.strictEqual(api.scoreEventWithData(aftData,'2MR','19:45',25,'M','general'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'2MR','22:45',25,'F','general'),60);
 
