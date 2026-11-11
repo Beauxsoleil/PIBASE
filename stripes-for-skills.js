@@ -9,6 +9,7 @@
   'use strict';
 
   var PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+  var JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
   var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
   var TEMPLATE_STORAGE_KEY = 'pibase.sfs.officialTemplate.v1';
   var INITIALS = 'JV';
@@ -16,7 +17,9 @@
   var RANKS = ['PVT', 'PV2', 'PFC', 'SPC', 'CPL', 'SGT', 'SSG', 'SFC', 'MSG', '1SG', 'SGM', 'CSM'];
 
   var pdfLibPromise = null;
+  var jsZipPromise = null;
   var generatedPdf = null;
+  var batchApplicants = [];
   var templateState = null;
 
   var OFFICIAL_RED_FIELDS = [
@@ -172,6 +175,28 @@
       document.head.appendChild(script);
     });
     return pdfLibPromise;
+  }
+
+
+  function ensureJsZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (jsZipPromise) return jsZipPromise;
+    jsZipPromise = new Promise(function (resolve, reject) {
+      var existing = document.querySelector('script[data-pibase-jszip]');
+      if (existing) {
+        existing.addEventListener('load', function () { resolve(window.JSZip); }, { once: true });
+        existing.addEventListener('error', function () { reject(new Error('Could not load the batch ZIP generator.')); }, { once: true });
+        return;
+      }
+      var script = document.createElement('script');
+      script.src = JSZIP_URL;
+      script.defer = true;
+      script.dataset.pibaseJszip = '1';
+      script.onload = function () { resolve(window.JSZip); };
+      script.onerror = function () { reject(new Error('Could not load the batch ZIP generator.')); };
+      document.head.appendChild(script);
+    });
+    return jsZipPromise;
   }
 
   function bytesToBase64(bytes) {
@@ -368,6 +393,12 @@
       '.sfs-status{min-height:1.2em;margin-top:8px;font-size:.76rem;color:var(--teal)}',
       '.sfs-result-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}',
       '.sfs-result-actions .btn{width:100%;margin:0;text-align:center;text-decoration:none}',
+      '.sfs-batch-list{display:grid;gap:7px;margin:12px 0;max-height:34vh;overflow:auto;padding-right:2px}',
+      '.sfs-batch-row{display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:end;background:var(--bg-raised);border:1px solid var(--line);border-radius:5px;padding:8px}',
+      '.sfs-batch-row label{margin:0 0 3px;font-size:.64rem}',
+      '.sfs-batch-row select,.sfs-batch-row input{margin:0;min-height:40px}',
+      '.sfs-progress{height:7px;background:var(--bg-raised);border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:8px}',
+      '.sfs-progress>span{display:block;height:100%;width:0;background:var(--brass);transition:width .15s ease}',
       '@media(min-width:600px){.sfs-modal{align-items:center}.sfs-panel{border-radius:12px}}'
     ].join('');
     document.head.appendChild(style);
@@ -578,6 +609,236 @@
     setTimeout(function () { document.getElementById('sfsRedDate').focus(); }, 0);
   }
 
+
+  function ensureBatchModal() {
+    var modal = document.getElementById('sfsBatchModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'sfsBatchModal';
+    modal.className = 'sfs-modal hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'sfsBatchTitle');
+    modal.innerHTML = '' +
+      '<div class="sfs-panel">' +
+        '<div class="sfs-head"><div><div class="eyebrow">BATCH DOCUMENTS</div><h2 id="sfsBatchTitle">Batch Stripes for Skills</h2></div><button class="sfs-close" id="sfsBatchCloseBtn" type="button" aria-label="Close">×</button></div>' +
+        '<div class="helper">One Red Phase date and one White Phase date will be applied to every selected Soldier. Confirm each rank before generating.</div>' +
+        '<div class="field-row"><div><label for="sfsBatchRedDate">Red Phase date</label><input id="sfsBatchRedDate" type="date"></div><div><label for="sfsBatchWhiteDate">White Phase date</label><input id="sfsBatchWhiteDate" type="date"></div></div>' +
+        '<div class="sfs-stamp"><div>Red: <span id="sfsBatchRedPreview">JV/________</span></div><div style="margin-top:4px">White: <span id="sfsBatchWhitePreview">JV/________</span></div></div>' +
+        '<div class="section-title" style="margin-top:14px">Selected Soldiers <span id="sfsBatchCount"></span></div>' +
+        '<div class="sfs-batch-list" id="sfsBatchList"></div>' +
+        '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsBatchCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsBatchGenerateBtn" type="button">Create ZIP</button></div>' +
+        '<div class="sfs-progress hidden" id="sfsBatchProgress"><span id="sfsBatchProgressBar"></span></div>' +
+        '<div class="sfs-status" id="sfsBatchStatus"></div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    function close() {
+      modal.classList.add('hidden');
+      batchApplicants = [];
+    }
+
+    document.getElementById('sfsBatchCloseBtn').addEventListener('click', close);
+    document.getElementById('sfsBatchCancelBtn').addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+
+    ['sfsBatchRedDate', 'sfsBatchWhiteDate'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', function () {
+        var red = document.getElementById('sfsBatchRedDate').value;
+        var white = document.getElementById('sfsBatchWhiteDate').value;
+        document.getElementById('sfsBatchRedPreview').textContent = red ? stamp(red) : 'JV/________';
+        document.getElementById('sfsBatchWhitePreview').textContent = white ? stamp(white) : 'JV/________';
+      });
+    });
+
+    document.getElementById('sfsBatchGenerateBtn').addEventListener('click', async function () {
+      var button = this;
+      var status = document.getElementById('sfsBatchStatus');
+      var progress = document.getElementById('sfsBatchProgress');
+      var progressBar = document.getElementById('sfsBatchProgressBar');
+      var redDate = document.getElementById('sfsBatchRedDate').value;
+      var whiteDate = document.getElementById('sfsBatchWhiteDate').value;
+      if (!redDate || !whiteDate) {
+        status.style.color = '#E08B77';
+        status.textContent = 'Both phase dates are required.';
+        return;
+      }
+      if (whiteDate < redDate) {
+        status.style.color = '#E08B77';
+        status.textContent = 'White Phase date cannot be before Red Phase date.';
+        return;
+      }
+
+      var rows = Array.from(document.querySelectorAll('#sfsBatchList .sfs-batch-row'));
+      var soldiers = rows.map(function (row) {
+        return {
+          id: row.dataset.id || '',
+          rank: row.querySelector('[data-batch-rank]').value,
+          name: cleanName(row.querySelector('[data-batch-name]').value)
+        };
+      }).filter(function (soldier) { return soldier.name; });
+      if (!soldiers.length) {
+        status.style.color = '#E08B77';
+        status.textContent = 'No valid Soldier names are selected.';
+        return;
+      }
+
+      status.style.color = '';
+      status.textContent = 'Preparing official forms…';
+      progress.classList.remove('hidden');
+      progressBar.style.width = '0%';
+      button.disabled = true;
+
+      try {
+        var pair = await Promise.all([ensurePdfLib(), ensureJsZip()]);
+        var PDFLib = pair[0];
+        var JSZip = pair[1];
+        var template = await getOfficialTemplate(PDFLib);
+        if (!template) {
+          var missing = new Error('Official Stripes for Skills template required.');
+          missing.code = 'SFS_TEMPLATE_REQUIRED';
+          throw missing;
+        }
+
+        var zip = new JSZip();
+        var usedNames = {};
+        for (var i = 0; i < soldiers.length; i++) {
+          var soldier = soldiers[i];
+          status.textContent = 'Creating ' + (i + 1) + ' of ' + soldiers.length + ': ' + soldier.name;
+          var bytes = await fillOfficialTemplate(PDFLib, {
+            rank: soldier.rank,
+            name: soldier.name,
+            redDate: redDate,
+            whiteDate: whiteDate
+          });
+          var filename = safeFilename(soldier.name);
+          var key = filename.toLowerCase();
+          if (usedNames[key]) {
+            usedNames[key] += 1;
+            filename = filename.replace(/\.pdf$/i, '_' + usedNames[key] + '.pdf');
+          } else {
+            usedNames[key] = 1;
+          }
+          zip.file(filename, bytes);
+          progressBar.style.width = Math.round(((i + 1) / soldiers.length) * 82) + '%';
+        }
+
+        status.textContent = 'Packaging ' + soldiers.length + ' PDFs…';
+        var blob = await zip.generateAsync(
+          { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+          function (meta) { progressBar.style.width = (82 + Math.round(meta.percent * 0.18)) + '%'; }
+        );
+        progressBar.style.width = '100%';
+
+        var zipName = 'Stripes_for_Skills_Batch_' + todayYmd() + '.zip';
+        var file = null;
+        try { file = new File([blob], zipName, { type: 'application/zip' }); } catch (_) {}
+        var shared = false;
+        if (file && navigator.share && navigator.canShare) {
+          try {
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: 'Stripes for Skills batch' });
+              shared = true;
+            }
+          } catch (err) {
+            if (!(err && err.name === 'AbortError')) console.warn('Batch share unavailable; using download fallback.', err);
+          }
+        }
+        if (!shared) {
+          var url = URL.createObjectURL(blob);
+          var link = document.createElement('a');
+          link.href = url;
+          link.download = zipName;
+          link.rel = 'noopener';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        }
+
+        status.textContent = shared
+          ? soldiers.length + ' official PDFs created and shared.'
+          : soldiers.length + ' official PDFs created in one ZIP.';
+      } catch (err) {
+        console.error('Batch Stripes generation failed', err);
+        status.style.color = '#E08B77';
+        status.textContent = err && err.message ? err.message : 'Could not create the batch.';
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    return modal;
+  }
+
+  function renderBatchApplicants(records) {
+    var list = document.getElementById('sfsBatchList');
+    list.innerHTML = '';
+    records.forEach(function (record, index) {
+      var parsed = inferRankAndName(record && record.name ? record.name : '');
+      var rank = RANKS.indexOf(String(record && record.rank || '').toUpperCase()) >= 0
+        ? String(record.rank).toUpperCase()
+        : parsed.rank;
+      var row = document.createElement('div');
+      row.className = 'sfs-batch-row';
+      row.dataset.id = String(record && record.id || index);
+
+      var rankWrap = document.createElement('div');
+      var rankLabel = document.createElement('label');
+      rankLabel.textContent = 'Rank';
+      var select = document.createElement('select');
+      select.setAttribute('data-batch-rank', '1');
+      RANKS.forEach(function (value) {
+        var option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        if (value === rank) option.selected = true;
+        select.appendChild(option);
+      });
+      rankWrap.appendChild(rankLabel);
+      rankWrap.appendChild(select);
+
+      var nameWrap = document.createElement('div');
+      var nameLabel = document.createElement('label');
+      nameLabel.textContent = 'Soldier ' + (index + 1);
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.setAttribute('data-batch-name', '1');
+      input.value = parsed.name || cleanName(record && record.name || '');
+      nameWrap.appendChild(nameLabel);
+      nameWrap.appendChild(input);
+
+      row.appendChild(rankWrap);
+      row.appendChild(nameWrap);
+      list.appendChild(row);
+    });
+    document.getElementById('sfsBatchCount').textContent = '(' + records.length + ')';
+  }
+
+  function openBatch(records) {
+    var clean = Array.isArray(records) ? records.filter(function (record) {
+      return record && cleanName(record.name);
+    }) : [];
+    if (!clean.length) return false;
+
+    injectStyles();
+    ensureBatchModal();
+    batchApplicants = clean.slice();
+    renderBatchApplicants(batchApplicants);
+    document.getElementById('sfsBatchRedDate').value = '';
+    document.getElementById('sfsBatchWhiteDate').value = '';
+    document.getElementById('sfsBatchRedPreview').textContent = 'JV/________';
+    document.getElementById('sfsBatchWhitePreview').textContent = 'JV/________';
+    document.getElementById('sfsBatchStatus').textContent = '';
+    document.getElementById('sfsBatchStatus').style.color = '';
+    document.getElementById('sfsBatchProgress').classList.add('hidden');
+    document.getElementById('sfsBatchProgressBar').style.width = '0%';
+    document.getElementById('sfsBatchModal').classList.remove('hidden');
+    setTimeout(function () { document.getElementById('sfsBatchRedDate').focus(); }, 0);
+    return true;
+  }
+
   function init() {
     injectStyles();
     ensureModal();
@@ -601,6 +862,8 @@
     expectedTemplateFields: EXPECTED_TEMPLATE_FIELDS.slice(),
     tasks: TASKS.map(function (task) { return { text: task.text, phase: task.phase }; }),
     officialRedFields: OFFICIAL_RED_FIELDS.slice(),
-    officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice()
+    officialWhiteFields: OFFICIAL_WHITE_FIELDS.slice(),
+    openBatch: openBatch,
+    jsZipUrl: JSZIP_URL
   };
 }());
