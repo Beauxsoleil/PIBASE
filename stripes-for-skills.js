@@ -797,21 +797,35 @@
     injectStyles();
     var modal = ensureModal();
     var info = inferRankAndName(document.getElementById('f_name') ? document.getElementById('f_name').value : '');
+    var applicantAge = document.getElementById('f_age') ? document.getElementById('f_age').value : '';
 
     document.getElementById('sfsRank').value = info.rank;
     document.getElementById('sfsSoldierName').value = info.name;
+    document.getElementById('sfsEnlistmentDate').value = '';
     document.getElementById('sfsRedDate').value = '';
     document.getElementById('sfsWhiteDate').value = '';
+    document.getElementById('sfsEnlistmentPreview').textContent = 'JV/________';
     document.getElementById('sfsRedPreview').textContent = 'JV/________';
     document.getElementById('sfsWhitePreview').textContent = 'JV/________';
+
+    document.getElementById('sfsIncludeAft').checked = false;
+    document.getElementById('sfsAftDetails').open = false;
+    document.getElementById('sfsAftDate').value = '';
+    document.getElementById('sfsAftAge').value = applicantAge || '';
+    document.getElementById('sfsAftSex').value = 'M';
+    document.getElementById('sfsAftStandard').value = 'general';
+    ['MDL','HRP','SDC','PLK','2MR'].forEach(function (event) {
+      document.getElementById('sfsAft' + event).value = '';
+    });
+    setSingleAftPointLabels(null);
+
     document.getElementById('sfsStatus').textContent = '';
     document.getElementById('sfsStatus').style.color = '';
     clearGeneratedPdf();
     modal.classList.remove('hidden');
     refreshTemplateStatus();
-    setTimeout(function () { document.getElementById('sfsRedDate').focus(); }, 0);
+    setTimeout(function () { document.getElementById('sfsEnlistmentDate').focus(); }, 0);
   }
-
 
   function ensureBatchModal() {
     var modal = document.getElementById('sfsBatchModal');
