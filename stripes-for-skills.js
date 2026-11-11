@@ -11,6 +11,7 @@
   var PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
   var JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
   var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
+  var AFT_SCORING_URL = './aft-scoring-data.json';
   var TEMPLATE_STORAGE_KEY = 'pibase.sfs.officialTemplate.v1';
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
@@ -21,38 +22,39 @@
   var generatedPdf = null;
   var batchApplicants = [];
   var templateState = null;
+  var aftDataPromise = null;
 
-  var OFFICIAL_RED_FIELDS = [
+  var ENLISTMENT_FIELDS = [
     'InitialsDate of CompletionEsatblish Bank Account',
     'InitialsDate of CompletionStart Direct Deposit',
     'InitialsDate of CompletionSet up AKO Account',
-    'InitialsDate of CompletionSet up MyPay Account',
+    'InitialsDate of CompletionSet up MyPay Account'
+  ];
+
+  // The current completed checklist leaves section-heading boxes blank and
+  // dates the individual tasks. Keep that spacing rather than filling every
+  // available AcroForm field.
+  var OFFICIAL_RED_FIELDS = [
     'InitialsDate of CompletionMilitary Time STRM White Phase Stripes for Skills',
-    'InitialsDate of CompletionDrill and Ceremony STRM Red Phase',
     'InitialsDate of CompletionExecute the Position of Attention',
     'InitialsDate of CompletionExecute the Hand Salute',
     'InitialsDate of CompletionKnow Who and When to Salute',
-    'InitialsDate of CompletionExecute Rest Positions While at the Halt STRM Red Phase',
     'InitialsDate of CompletionParade Rest',
     'InitialsDate of CompletionStand at Ease',
     'InitialsDate of CompletionAt Ease',
     'InitialsDate of CompletionRest',
-    'InitialsDate of CompletionExecute Facing Movements While at the Halt STRM Red Phase',
     'InitialsDate of CompletionRight Face',
     'InitialsDate of CompletionLeft Face',
     'InitialsDate of CompletionAbout Face',
-    'InitialsDate of CompletionMarching STRM Red Phase',
     'InitialsDate of CompletionForward March',
     'InitialsDate of CompletionHalf Step',
     'InitialsDate of CompletionChange Step',
     'InitialsDate of CompletionColumn Left STRM White Phase',
     'InitialsDate of CompletionColumn Right STRM White Phase',
     'InitialsDate of CompletionHalt',
-    'InitialsDate of CompletionIdenitfy Rank Structure STRM Red Phase',
     'InitialsDate of CompletionEnlisted Ranks',
     'InitialsDate of CompletionOfficer Ranks',
     'InitialsDate of CompletionWarrant Officer Ranks',
-    'InitialsDate of CompletionPhonetic Alphabet STRM Red Phase',
     'InitialsDate of CompletionKnow  Recite Phonetic Alphabet',
     'Identify Terrain Features on a Map',
     'Determine Grid Coordinates on a Map',
@@ -61,66 +63,51 @@
   ];
 
   var OFFICIAL_WHITE_FIELDS = [
-    'InitialsDate of CompletionRecite General Orders STRM White Phase Stripes for Skills',
     'InitialsDate of CompletionFirst General Order',
     'InitialsDate of CompletionSecond General Order',
     'InitialsDate of CompletionThird General Order',
-    'InitialsDate of CompletionFirst AidCLS STRM White Phase',
     'InitialsDate of CompletionEvaluate a Casualty',
     'InitialsDate of CompletionPerform First Aid and Prctice Individual Preventative Medicine Countermeasures',
     'InitialsDate of CompletionPerform First Aid for Bleeding Extremity',
-    'InitialsDate of CompletionPerform First Aid for Splinting a Fracture',
-    'Points', 'Points_2', 'Points_3', 'Points_4', 'Points_5', 'Points_6',
-    'Land Navigation'
+    'InitialsDate of CompletionPerform First Aid for Splinting a Fracture'
   ];
 
+  // This is still the legacy six-row ACFT artwork. The current AFT uses five
+  // events, so the Standing Power Throw row (Meters / Points_2) stays blank.
+  var AFT_FIELDS = {
+    MDL: { raw: 'LBS', score: 'Text1', date: 'Points' },
+    HRP: { raw: 'Repitions', score: 'Text3', date: 'Points_3' },
+    SDC: { raw: 'Min  Sec', score: 'Text4', date: 'Points_4' },
+    PLK: { raw: 'Repitions_2', score: 'Text2', date: 'Points_5' },
+    '2MR': { raw: 'Min  Sec_2', score: 'Text5', date: 'Points_6' }
+  };
+  var AFT_EVENTS = ['MDL','HRP','SDC','PLK','2MR'];
+
   var EXPECTED_TEMPLATE_FIELDS = [
-    'Date',
-    'NAME  RANK',
-    'PLATOON SGTUNIT'
-  ].concat(OFFICIAL_RED_FIELDS, OFFICIAL_WHITE_FIELDS);
+    'Date', 'NAME  RANK', 'PLATOON SGTUNIT', 'Meters', 'Points_2'
+  ].concat(
+    ENLISTMENT_FIELDS,
+    OFFICIAL_RED_FIELDS,
+    OFFICIAL_WHITE_FIELDS,
+    AFT_EVENTS.flatMap(function (event) {
+      var fields = AFT_FIELDS[event];
+      return [fields.raw, fields.score, fields.date];
+    })
+  );
 
   var TASKS = [
-    { text: 'Esatblish Bank Account', phase: 'R' },
-    { text: 'Start Direct Deposit', phase: 'R' },
-    { text: 'Set up AKO Account', phase: 'R' },
-    { text: 'Set up MyPay Account', phase: 'R' },
+    { text: 'Esatblish Bank Account', phase: 'E' },
+    { text: 'Start Direct Deposit', phase: 'E' },
+    { text: 'Set up AKO Account', phase: 'E' },
+    { text: 'Set up MyPay Account', phase: 'E' },
     { text: 'Military Time (STRM White Phase Stripes for Skills)', phase: 'R' },
-    { text: 'Drill and Ceremony (STRM Red Phase)', phase: 'R' },
-    { text: 'Execute the Position of Attention', phase: 'R' },
-    { text: 'Execute the Hand Salute', phase: 'R' },
-    { text: 'Know Who and When to Salute', phase: 'R' },
-    { text: 'Execute Rest Positions While at the Halt (STRM Red Phase)', phase: 'R' },
-    { text: 'Parade Rest', phase: 'R' },
-    { text: 'Stand at Ease', phase: 'R' },
-    { text: 'At Ease', phase: 'R' },
-    { text: 'Rest', phase: 'R' },
-    { text: 'Execute Facing Movements While at the Halt (STRM Red Phase)', phase: 'R' },
-    { text: 'Right Face', phase: 'R' },
-    { text: 'Left Face', phase: 'R' },
-    { text: 'About Face', phase: 'R' },
-    { text: 'Marching (STRM Red Phase)', phase: 'R' },
-    { text: 'Forward March', phase: 'R' },
-    { text: 'Half Step', phase: 'R' },
-    { text: 'Change Step', phase: 'R' },
+    { text: 'Drill and Ceremony tasks', phase: 'R' },
     { text: 'Column Left (STRM White Phase)', phase: 'R' },
     { text: 'Column Right (STRM White Phase)', phase: 'R' },
-    { text: 'Halt', phase: 'R' },
-    { text: 'Recite General Orders (STRM White Phase Stripes for Skills)', phase: 'W' },
-    { text: 'First General Order', phase: 'W' },
-    { text: 'Second General Order', phase: 'W' },
-    { text: 'Third General Order', phase: 'W' },
-    { text: 'Idenitfy Rank Structure (STRM Red Phase)', phase: 'R' },
-    { text: 'Enlisted Ranks', phase: 'R' },
-    { text: 'Officer Ranks', phase: 'R' },
-    { text: 'Warrant Officer Ranks', phase: 'R' },
-    { text: 'Phonetic Alphabet (STRM Red Phase)', phase: 'R' },
-    { text: 'Know / Recite Phonetic Alphabet', phase: 'R' },
-    { text: 'First Aid/CLS (STRM White Phase)', phase: 'W' },
-    { text: 'Evaluate a Casualty', phase: 'W' },
-    { text: 'Perform First Aid and Prctice Individual Preventative Medicine Countermeasures', phase: 'W' },
-    { text: 'Perform First Aid for Bleeding Extremity', phase: 'W' },
-    { text: 'Perform First Aid for Splinting a Fracture', phase: 'W' }
+    { text: 'General Orders tasks', phase: 'W' },
+    { text: 'Rank Structure tasks', phase: 'R' },
+    { text: 'Phonetic Alphabet task', phase: 'R' },
+    { text: 'First Aid/CLS tasks', phase: 'W' }
   ];
 
   function ymd(dateValue) {
@@ -149,6 +136,88 @@
       if (upper.indexOf(rank + ' ') === 0) return { rank: rank, name: name.slice(rank.length).trim() };
     }
     return { rank: 'PVT', name: name };
+  }
+
+  function ageBand(age) {
+    var n = Number(age);
+    if (!Number.isFinite(n) || n < 17) return null;
+    if (n <= 21) return '17-21';
+    if (n <= 26) return '22-26';
+    if (n <= 31) return '27-31';
+    if (n <= 36) return '32-36';
+    if (n <= 41) return '37-41';
+    if (n <= 46) return '42-46';
+    if (n <= 51) return '47-51';
+    if (n <= 56) return '52-56';
+    if (n <= 61) return '57-61';
+    return '62+';
+  }
+
+  function timeToSeconds(value) {
+    var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    var minutes = Number(match[1]), seconds = Number(match[2]);
+    if (seconds > 59) return null;
+    return minutes * 60 + seconds;
+  }
+
+  function rawNumericValue(event, value) {
+    if (event === 'MDL' || event === 'HRP') {
+      var n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+    return timeToSeconds(value);
+  }
+
+  function thresholdNumericValue(event, value) {
+    return rawNumericValue(event, value);
+  }
+
+  function scoreEventWithData(data, event, raw, age, sex, standard) {
+    var band = ageBand(age);
+    var eventData = data && data.events && data.events[event];
+    if (!band || !eventData) return null;
+    var columnSex = standard === 'combat' ? 'M' : String(sex || '').toUpperCase();
+    if (columnSex !== 'M' && columnSex !== 'F') return null;
+    var rows = eventData.columns && eventData.columns[band] && eventData.columns[band][columnSex];
+    var value = rawNumericValue(event, raw);
+    if (!rows || value === null) return null;
+
+    for (var i = 0; i < rows.length; i++) {
+      var points = Number(rows[i][0]);
+      var threshold = thresholdNumericValue(event, rows[i][1]);
+      if (threshold === null) continue;
+      if (eventData.direction === 'higher' ? value >= threshold : value <= threshold) return points;
+    }
+    return 0;
+  }
+
+  function scoreAftWithData(data, options) {
+    var raw = options && options.raw || {};
+    var scores = {};
+    var complete = true;
+    AFT_EVENTS.forEach(function (event) {
+      var points = scoreEventWithData(data, event, raw[event], options.age, options.sex, options.standard);
+      scores[event] = points;
+      if (points === null) complete = false;
+    });
+    if (!complete) return { complete: false, scores: scores, total: null, pass: false };
+    var total = AFT_EVENTS.reduce(function (sum, event) { return sum + scores[event]; }, 0);
+    var target = options.standard === 'combat' ? 350 : 300;
+    var pass = total >= target && AFT_EVENTS.every(function (event) { return scores[event] >= 60; });
+    return { complete: true, scores: scores, total: total, target: target, pass: pass };
+  }
+
+  function loadAftData() {
+    if (aftDataPromise) return aftDataPromise;
+    aftDataPromise = fetch(AFT_SCORING_URL, { cache: 'force-cache' }).then(function (response) {
+      if (!response.ok) throw new Error('AFT scoring tables are unavailable.');
+      return response.json();
+    }).then(function (data) {
+      if (!data || data.version !== '250601' || !data.events) throw new Error('AFT scoring table version is invalid.');
+      return data;
+    });
+    return aftDataPromise;
   }
 
   function safeFilename(name) {
@@ -295,6 +364,7 @@
     var form = pdf.getForm();
     var font = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
     var soldier = (options.rank + ' ' + options.name).trim().toUpperCase();
+    var enlistmentStamp = stamp(options.enlistmentDate);
     var redStamp = stamp(options.redDate);
     var whiteStamp = stamp(options.whiteDate);
 
@@ -302,14 +372,26 @@
     setText(form, 'NAME  RANK', soldier, 8);
     setText(form, 'PLATOON SGTUNIT', RECRUITER_LINE, 9);
 
+    ENLISTMENT_FIELDS.forEach(function (name) { setText(form, name, enlistmentStamp, 7); });
     OFFICIAL_RED_FIELDS.forEach(function (name) { setText(form, name, redStamp, 7); });
     OFFICIAL_WHITE_FIELDS.forEach(function (name) { setText(form, name, whiteStamp, 7); });
 
-    // Force appearance streams before flattening. This avoids viewer-specific
-    // blank fields, black overlays, and inconsistent AcroForm rendering.
+    if (options.aft && options.aft.complete) {
+      var aftStamp = stamp(options.aft.date);
+      AFT_EVENTS.forEach(function (event) {
+        var fields = AFT_FIELDS[event];
+        setText(form, fields.raw, String(options.aft.raw[event]), 7);
+        setText(form, fields.score, String(options.aft.scores[event]), 7);
+        setText(form, fields.date, aftStamp, 7);
+      });
+    }
+
+    // The Standing Power Throw row is not part of the current five-event AFT.
+    setText(form, 'Meters', '', 7);
+    setText(form, 'Points_2', '', 7);
+
     form.updateFieldAppearances(font);
     form.flatten();
-
     return pdf.save({ useObjectStreams: false });
   }
 
