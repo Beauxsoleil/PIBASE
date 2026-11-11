@@ -56,13 +56,20 @@ assert.ok(api.expectedTemplateFields.includes('Date'));
 assert.ok(api.expectedTemplateFields.includes('NAME  RANK'));
 assert.ok(api.expectedTemplateFields.includes('PLATOON SGTUNIT'));
 assert.ok(api.expectedTemplateFields.length >= 50);
+assert.strictEqual(typeof api.openBatch, 'function');
+assert.match(api.jsZipUrl, /jszip@3\.10\.1/);
 
 const index = await readFile(join(root, 'index.html'), 'utf8');
 assert.match(index, /<script defer src="\.\/stripes-for-skills\.js"><\/script>/);
+assert.match(index, /id="batchSfsModeBtn"/);
+assert.match(index, /id="batchSfsSelectAllBtn"/);
+assert.match(index, /id="batchSfsGenerateBtn"/);
+assert.match(index, /openBatch\(selected\.map/);
 const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
 assert.ok(worker.includes("'stripes-for-skills.js'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
-assert.match(worker, /pibase-app-v31/);
+assert.ok(worker.includes('jszip@3.10.1'));
+assert.match(worker, /pibase-app-v32/);
 assert.ok(worker.includes("'assets/stripes-for-skills-template.pdf'"));
 
 const template = await readFile(join(root, 'assets', 'stripes-for-skills-template.pdf'));
@@ -73,6 +80,8 @@ assert.strictEqual(
 );
 
 assert.match(source, /validateTemplate/);
+assert.match(source, /ensureJsZip/);
+assert.match(source, /zip\.generateAsync/);
 assert.match(source, /form\.updateFieldAppearances\(font\)/);
 assert.match(source, /form\.flatten\(\)/);
 assert.match(source, /localStorage\.setItem\(TEMPLATE_STORAGE_KEY/);
