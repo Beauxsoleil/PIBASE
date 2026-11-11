@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Build PIBASE AFT scoring data for the Army 250601 scoring scales.
+"""Build PIBASE AFT scoring data from the official U.S. Army scoring PDF.
 
-Primary authority is the Army PDF. army.mil blocks GitHub Actions downloads on
-some runners, so the builder can fall back to a static HTML transcription. The
-fallback is accepted only after exact validation against official Army anchor
-rows hard-coded from the PDF.
+Source is the GoArmy-hosted HQDA EXORD scoring-table annex. The generated JSON
+preserves every published point row and every dash; no interpolation is added.
 """
-import hashlib, json, re, sys, urllib.error, urllib.request
+import hashlib, json, re, sys, urllib.request
 from pathlib import Path
+import pdfplumber
 
-ARMY_URL = "https://www.army.mil/e2/downloads/rv7/aft/AFT_Scoring_Scales_250601.pdf"
-TRANSCRIPTION_URL = "https://aftscorecalculator.com/aft-score-chart/"
+SOURCE_URL = "https://www.goarmy.com/content/dam/goarmy/files/HQDA_EXORD_218-25__CC__Annex_B_-_Scoring_Tables__Final_.pdf"
 AGE_BANDS = ["17-21","22-26","27-31","32-36","37-41","42-46","47-51","52-56","57-61","62+"]
+EVENT_PAGES = {
+    "MDL": [0],
+    "HRP": [1],
+    "SDC": [2,3],
+    "PLK": [4,5],
+    "2MR": [6,7],
+}
 DIRECTION = {"MDL":"higher","HRP":"higher","SDC":"lower","PLK":"higher","2MR":"lower"}
 EXPECTED_60 = {
     "MDL": ["150","120","150","120","150","120","140","120","140","120","140","120","140","120","140","120","140","120","140","120"],
@@ -27,76 +32,73 @@ EXPECTED_100 = {
     "PLK": ["3:40","3:40","3:35","3:35","3:30","3:30","3:25","3:25","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20"],
     "2MR": ["13:22","16:00","13:25","15:30","13:25","15:30","13:42","15:48","13:42","15:51","14:05","16:00","14:30","16:30","15:09","16:59","15:28","17:18","15:28","17:18"],
 }
+# Minimum number of distinct points rows expected from the official tables.
+MIN_ROWS = {"MDL":65,"HRP":55,"SDC":95,"PLK":95,"2MR":95}
+TOKEN_RE = re.compile(r"---|\d+:\d{2}|\d+")
 
-def request(url, accept):
-    req=urllib.request.Request(url,headers={
+def download():
+    req=urllib.request.Request(SOURCE_URL,headers={
         "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36",
-        "Referer":"https://www.army.mil/aft/",
-        "Accept":accept,
+        "Accept":"application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
         "Accept-Language":"en-US,en;q=0.9",
     })
-    with urllib.request.urlopen(req,timeout=30) as r:
-        return r.read()
+    with urllib.request.urlopen(req,timeout=45) as r:
+        data=r.read()
+    if not data.startswith(b"%PDF"):
+        raise RuntimeError("Official GoArmy scoring source did not return a PDF")
+    return data
 
-def parse_html_tables(html):
-    from bs4 import BeautifulSoup
-    soup=BeautifulSoup(html,"html.parser")
-    event_markers={
-        "maximum deadlift":"MDL",
-        "hand-release push-up":"HRP",
-        "sprint-drag-carry":"SDC",
-        "plank":"PLK",
-        "two-mile run":"2MR",
-    }
+def parse_row(line):
+    toks=TOKEN_RE.findall(line.replace("—","---"))
+    if len(toks) < 22 or not toks[0].isdigit():
+        return None
+    pts=int(toks[0])
+    # A valid row has the point value at both margins.
+    if not toks[-1].isdigit() or int(toks[-1]) != pts:
+        return None
+    vals=toks[1:-1]
+    if len(vals) != 20:
+        return None
+    return pts, vals
+
+def extract_rows(pdf_path):
     rows_by_event={}
-    for table in soup.find_all("table"):
-        heading=table.find_previous(["h2","h3","h4"])
-        title=(heading.get_text(" ",strip=True) if heading else "").lower()
-        event=next((code for marker,code in event_markers.items() if marker in title),None)
-        if not event:
-            continue
-        rows={}
-        for tr in table.find_all("tr"):
-            cells=[x.get_text(" ",strip=True).replace("–","—").replace("---","—") for x in tr.find_all(["th","td"])]
-            if len(cells) != 22 or not cells[0].isdigit() or cells[-1] != cells[0]:
-                continue
-            pts=int(cells[0])
-            vals=[("---" if v in {"—","-",""} else v) for v in cells[1:21]]
-            rows[pts]=vals
-        if rows:
+    with pdfplumber.open(str(pdf_path)) as pdf:
+        if len(pdf.pages) < 8:
+            raise RuntimeError(f"Expected at least 8 scoring pages, got {len(pdf.pages)}")
+        for event,pages in EVENT_PAGES.items():
+            rows={}
+            for p in pages:
+                text=pdf.pages[p].extract_text(x_tolerance=1,y_tolerance=3) or ""
+                for line in text.splitlines():
+                    parsed=parse_row(line)
+                    if parsed:
+                        pts,vals=parsed
+                        rows[pts]=vals
             rows_by_event[event]=rows
-    missing=[e for e in DIRECTION if e not in rows_by_event]
-    if missing:
-        raise RuntimeError(f"Transcription page missing tables: {missing}")
     return rows_by_event
 
 def validate(rows_by_event):
-    for event in DIRECTION:
+    for event in EVENT_PAGES:
         rows=rows_by_event[event]
-        if 60 not in rows:
-            raise RuntimeError(f"{event}: missing 60-point row")
-        if rows[60] != EXPECTED_60[event]:
-            raise RuntimeError(f"{event}: official 60-point anchor mismatch: {rows[60]}")
-        if 100 not in rows:
-            raise RuntimeError(f"{event}: missing 100-point row")
-        if rows[100] != EXPECTED_100[event]:
-            raise RuntimeError(f"{event}: official 100-point anchor mismatch: {rows[100]}")
+        if len(rows) < MIN_ROWS[event]:
+            raise RuntimeError(f"{event}: parsed only {len(rows)} point rows; expected at least {MIN_ROWS[event]}")
+        if rows.get(60) != EXPECTED_60[event]:
+            raise RuntimeError(f"{event}: official 60-point anchor mismatch: {rows.get(60)}")
+        if rows.get(100) != EXPECTED_100[event]:
+            raise RuntimeError(f"{event}: official 100-point anchor mismatch: {rows.get(100)}")
+        if not all(0 <= p <= 100 for p in rows):
+            raise RuntimeError(f"{event}: invalid point key found")
 
 def main(out_path):
-    provenance={"officialSource":ARMY_URL}
-    rows_by_event=None
+    pdf_bytes=download()
+    source_sha=hashlib.sha256(pdf_bytes).hexdigest()
+    tmp=Path(out_path).with_suffix(".official.pdf")
+    tmp.write_bytes(pdf_bytes)
     try:
-        pdf=request(ARMY_URL,"application/pdf,application/octet-stream;q=0.9,*/*;q=0.8")
-        if pdf.startswith(b"%PDF"):
-            provenance["armyPdfSha256"]=hashlib.sha256(pdf).hexdigest()
-            provenance["note"]="Army PDF download verified, but table extraction uses the validated HTML transcription."
-    except Exception as exc:
-        provenance["armyDownloadNote"]=f"Automation download blocked: {type(exc).__name__}"
-
-    html=request(TRANSCRIPTION_URL,"text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
-    provenance["transcriptionSource"]=TRANSCRIPTION_URL
-    provenance["transcriptionSha256"]=hashlib.sha256(html).hexdigest()
-    rows_by_event=parse_html_tables(html)
+        rows_by_event=extract_rows(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
     validate(rows_by_event)
 
     out={
@@ -104,7 +106,11 @@ def main(out_path):
         "approved":"2025-05-15",
         "effective":"2025-06-01",
         "ageBands":AGE_BANDS,
-        "provenance":provenance,
+        "provenance":{
+            "officialSource":SOURCE_URL,
+            "officialSha256":source_sha,
+            "method":"pdfplumber table-row extraction; no interpolation"
+        },
         "events":{}
     }
     for event,rows in rows_by_event.items():
@@ -120,9 +126,10 @@ def main(out_path):
         out["events"][event]={"direction":DIRECTION[event],"columns":columns}
 
     Path(out_path).write_text(json.dumps(out,separators=(",",":"),sort_keys=True)+"\n")
-    print(f"Wrote {out_path}; scoring version {out['version']}")
-    for e in DIRECTION:
-        print(e, "rows", len(rows_by_event[e]), "entries", sum(len(v[s]) for v in out["events"][e]["columns"].values() for s in ("M","F")))
+    print(f"Wrote {out_path}; official PDF SHA-256 {source_sha}")
+    for event in EVENT_PAGES:
+        print(event, "point rows", len(rows_by_event[event]),
+              "stored cells", sum(len(v[s]) for v in out["events"][event]["columns"].values() for s in ("M","F")))
 
 if __name__=="__main__":
     main(sys.argv[1] if len(sys.argv)>1 else "aft-scoring-data.json")
