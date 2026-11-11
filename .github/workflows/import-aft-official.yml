@@ -46,6 +46,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin feature/sfs-aft-enlistment
           git add aft-scoring-data.json
           git rm .github/workflows/import-aft-official.yml
           git commit -m "Bundle complete official AFT scoring data [official-aft-imported]"
