@@ -100,6 +100,16 @@
   .mission-details-body .monthly-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
   .mission-details-body .mission-save{flex-wrap:wrap}
   @media(max-width:460px){.mission-details-body .monthly-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.mission-details-body .monthly-fields>div:first-child{grid-column:1/-1}.mission-details-body .field-row label{min-height:0}}
+
+  .batch-sfs-tools{display:grid;gap:8px;margin:10px 0 14px}
+  .batch-sfs-tools>.btn{width:100%;margin:0}
+  .batch-sfs-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .batch-sfs-actions .btn{width:100%;margin:0}
+  .batch-sfs-actions .batch-sfs-generate{grid-column:1/-1}
+  .list-card.batch-selectable{cursor:pointer;padding-top:10px}
+  .list-card.batch-selected{outline:2px solid var(--brass);outline-offset:-2px}
+  .batch-sfs-check{display:inline-flex;align-items:center;gap:7px;margin:0 0 8px;font-size:.72rem;color:var(--text-muted);font-weight:700}
+  .batch-sfs-check input{width:20px;height:20px;margin:0;accent-color:var(--brass)}
 </style>
 </head>
 <body>
@@ -138,6 +148,14 @@
     <button type="button" class="folder-btn" data-folder="previousFY"><span class="folder-name">Previous FY</span><span class="folder-count" id="previousFYCount">0</span></button>
   </nav>
   <button class="add-btn" id="addBtn">+ New applicant</button>
+  <div class="batch-sfs-tools">
+    <button class="btn btn-secondary" id="batchSfsModeBtn" type="button">Batch Stripes for Skills</button>
+    <div class="batch-sfs-actions hidden" id="batchSfsActions">
+      <button class="btn btn-secondary" id="batchSfsSelectAllBtn" type="button">Select all</button>
+      <button class="btn btn-secondary" id="batchSfsCancelBtn" type="button">Cancel batch</button>
+      <button class="btn btn-primary batch-sfs-generate" id="batchSfsGenerateBtn" type="button" disabled>Generate selected (0)</button>
+    </div>
+  </div>
   <div class="sort-row"><label for="sortMode">Sort</label><select id="sortMode"><option value="precedence">Precedence</option><option value="updated">Recently updated</option><option value="name">Name A–Z</option></select></div>
   <button class="btn btn-secondary btn-block" id="leadsNavBtn" type="button" style="margin-bottom:14px;">Survey leads</button>
   <div id="listContainer"><div class="eyebrow" style="text-align:center;padding:30px 0;">Loading…</div></div>
@@ -209,6 +227,7 @@
   document.getElementById('signOutBtn').addEventListener('click',()=>signOut(auth));
 
   let applicants=[],currentFolder='active',unsubscribeApplicants=null,unsubscribeMission=null;
+  let batchSfsMode=false,batchSfsSelected=new Set();
   onAuthStateChanged(auth,user=>{if(user){showScreen('list');subscribeApplicants();subscribeMission();}else{showScreen('login');if(unsubscribeApplicants)unsubscribeApplicants();if(unsubscribeMission)unsubscribeMission();}});
   function subscribeApplicants(){const q=query(collection(db,'applicants'),orderBy('updatedAt','desc'));unsubscribeApplicants=onSnapshot(q,snap=>{applicants=snap.docs.map(d=>({id:d.id,...d.data()}));renderList();publishBoudreaux();});}
   function subscribeMission(){if(unsubscribeMission)unsubscribeMission();unsubscribeMission=onSnapshot(doc(db,'settings','mission'),snap=>{const data=snap.exists()?snap.data():{};document.getElementById('missionFiscalYear').value=data.fiscalYear||currentFiscalYear();document.getElementById('missionTarget').value=Number.isFinite(Number(data.target))&&Number(data.target)>0?Number(data.target):'';const m=data.monthlyMission||{};document.getElementById('monthlyMissionMonth').value=m.month||localMissionMonth();document.getElementById('monthlyMissionTarget').value=m.target??'';document.getElementById('monthlyMissionConfirmed').value=m.confirmed??'';publishBoudreaux();publishThibideaux(data);},err=>{console.error('Mission settings read failed',err);document.getElementById('missionFiscalYear').value=currentFiscalYear();});}
@@ -225,9 +244,47 @@
   function sortedApplicants(source=applicantsInFolder()){const docs=[...source];if(sortMode.value==='name')return docs.sort((a,b)=>(a.name||'').localeCompare(b.name||''));if(sortMode.value==='updated')return docs.sort((a,b)=>timestampMillis(b.updatedAt)-timestampMillis(a.updatedAt));return docs.sort((a,b)=>precedenceRank(b.precedence)-precedenceRank(a.precedence)||timestampMillis(b.updatedAt)-timestampMillis(a.updatedAt));}
   function folderTitle(folder){return folder==='cowards'?'Cowards':folder==='previousFY'?'Previous FY':'Applicants';}
   function renderFolderNav(){const counts={active:applicantsInFolder('active').length,cowards:applicantsInFolder('cowards').length,previousFY:applicantsInFolder('previousFY').length};document.getElementById('activeCount').textContent=counts.active;document.getElementById('cowardsCount').textContent=counts.cowards;document.getElementById('previousFYCount').textContent=counts.previousFY;document.querySelectorAll('[data-folder]').forEach(btn=>{const selected=btn.dataset.folder===currentFolder;btn.classList.toggle('active',selected);btn.setAttribute('aria-pressed',String(selected));});document.getElementById('applicantListTitle').textContent=folderTitle(currentFolder);document.getElementById('addBtn').classList.toggle('hidden',currentFolder!=='active');}
-  function renderApplicantCard(a){const precedence=a.precedence||'normal',label=precedence==='high'?'High':precedence==='medium'?'Medium':'Normal',next=nextActionLabel(a),archive=isArchived(a)?`<div class="archive-tag">${a.archiveFolder==='cowards'?'Cowards':`FY${String(Number(a.archivedFiscalYear)||'—').slice(-2)}`}</div>`:'';return`<div class="list-card" data-id="${escapeHtml(a.id)}"><div class="row1"><div class="name">${escapeHtml(a.name||'Unnamed')}</div><div class="right-tags">${archive}<div class="precedence-tag ${precedence}">${label}</div><div class="stage-tag">${STAGE_SHORT[canonicalStage(a.statusStage)]||''}</div></div></div><div class="sub">${[a.generalArea||null,a.age?a.age+' yo':null,a.priorService].filter(Boolean).map(escapeHtml).join(' · ')}</div>${next?`<div class="next-action ${isActionOverdue(a)?'overdue':''}">${escapeHtml(next)}</div>`:''}</div>`;}
-  function renderList(){const container=document.getElementById('listContainer'),docs=sortedApplicants();renderFolderNav();if(!docs.length){const label=currentFolder==='active'?'No active applicants':currentFolder==='cowards'?'Cowards is empty':'Previous FY is empty';container.innerHTML=`<div class="eyebrow" style="text-align:center;padding:30px 0;">${label}</div>`;return;}if(currentFolder==='previousFY'){const groups=new Map();for(const a of docs){const fy=Number(a.archivedFiscalYear)||0;if(!groups.has(fy))groups.set(fy,[]);groups.get(fy).push(a);}container.innerHTML=[...groups.entries()].sort((a,b)=>b[0]-a[0]).map(([fy,items])=>`<div class="fy-group"><span>${fy?`FY${String(fy).slice(-2)}`:'Older'}</span><span>${items.length}</span></div>${items.map(renderApplicantCard).join('')}`).join('');}else container.innerHTML=docs.map(renderApplicantCard).join('');container.querySelectorAll('.list-card').forEach(card=>card.addEventListener('click',()=>openDetail(card.dataset.id)));}
-  document.getElementById('folderNav').addEventListener('click',e=>{const button=e.target.closest('[data-folder]');if(!button)return;currentFolder=button.dataset.folder;renderList();});
+  function updateBatchSfsControls(){
+    const modeBtn=document.getElementById('batchSfsModeBtn'),actions=document.getElementById('batchSfsActions'),generate=document.getElementById('batchSfsGenerateBtn'),selectAll=document.getElementById('batchSfsSelectAllBtn');
+    if(!modeBtn||!actions||!generate||!selectAll)return;
+    modeBtn.classList.toggle('hidden',batchSfsMode);
+    actions.classList.toggle('hidden',!batchSfsMode);
+    const docs=sortedApplicants(),selectedHere=docs.filter(a=>batchSfsSelected.has(a.id)).length;
+    generate.disabled=batchSfsSelected.size===0;
+    generate.textContent='Generate selected ('+batchSfsSelected.size+')';
+    selectAll.textContent=docs.length&&selectedHere===docs.length?'Clear all':'Select all';
+  }
+  function exitBatchSfsMode(render=true){batchSfsMode=false;batchSfsSelected.clear();if(render)renderList();else updateBatchSfsControls();}
+  function setBatchSfsSelection(id,selected){
+    if(selected)batchSfsSelected.add(id);else batchSfsSelected.delete(id);
+    const card=document.querySelector('.list-card[data-id="'+CSS.escape(id)+'"]');
+    if(card){card.classList.toggle('batch-selected',selected);const input=card.querySelector('[data-batch-sfs-check]');if(input)input.checked=selected;}
+    updateBatchSfsControls();
+  }
+  function renderApplicantCard(a){
+    const precedence=a.precedence||'normal',label=precedence==='high'?'High':precedence==='medium'?'Medium':'Normal',next=nextActionLabel(a),archive=isArchived(a)?`<div class="archive-tag">${a.archiveFolder==='cowards'?'Cowards':`FY${String(Number(a.archivedFiscalYear)||'—').slice(-2)}`}</div>`:'',checked=batchSfsSelected.has(a.id);
+    const batch=batchSfsMode?`<label class="batch-sfs-check"><input type="checkbox" data-batch-sfs-check value="${escapeHtml(a.id)}" ${checked?'checked':''}><span>Select for batch</span></label>`:'';
+    return`<div class="list-card ${batchSfsMode?'batch-selectable':''} ${checked?'batch-selected':''}" data-id="${escapeHtml(a.id)}">${batch}<div class="row1"><div class="name">${escapeHtml(a.name||'Unnamed')}</div><div class="right-tags">${archive}<div class="precedence-tag ${precedence}">${label}</div><div class="stage-tag">${STAGE_SHORT[canonicalStage(a.statusStage)]||''}</div></div></div><div class="sub">${[a.generalArea||null,a.age?a.age+' yo':null,a.priorService].filter(Boolean).map(escapeHtml).join(' · ')}</div>${next?`<div class="next-action ${isActionOverdue(a)?'overdue':''}">${escapeHtml(next)}</div>`:''}</div>`;
+  }
+  function renderList(){
+    const container=document.getElementById('listContainer'),docs=sortedApplicants();
+    const validIds=new Set(applicants.map(a=>a.id));batchSfsSelected=new Set([...batchSfsSelected].filter(id=>validIds.has(id)));
+    renderFolderNav();updateBatchSfsControls();
+    if(!docs.length){const label=currentFolder==='active'?'No active applicants':currentFolder==='cowards'?'Cowards is empty':'Previous FY is empty';container.innerHTML=`<div class="eyebrow" style="text-align:center;padding:30px 0;">${label}</div>`;return;}
+    if(currentFolder==='previousFY'){const groups=new Map();for(const a of docs){const fy=Number(a.archivedFiscalYear)||0;if(!groups.has(fy))groups.set(fy,[]);groups.get(fy).push(a);}container.innerHTML=[...groups.entries()].sort((a,b)=>b[0]-a[0]).map(([fy,items])=>`<div class="fy-group"><span>${fy?`FY${String(fy).slice(-2)}`:'Older'}</span><span>${items.length}</span></div>${items.map(renderApplicantCard).join('')}`).join('');}else container.innerHTML=docs.map(renderApplicantCard).join('');
+    container.querySelectorAll('.list-card').forEach(card=>card.addEventListener('click',e=>{if(batchSfsMode){if(e.target.closest('.batch-sfs-check'))return;setBatchSfsSelection(card.dataset.id,!batchSfsSelected.has(card.dataset.id));return;}openDetail(card.dataset.id);}));
+    container.querySelectorAll('[data-batch-sfs-check]').forEach(input=>input.addEventListener('change',()=>setBatchSfsSelection(input.value,input.checked)));
+  }
+  document.getElementById('batchSfsModeBtn').addEventListener('click',()=>{batchSfsMode=true;batchSfsSelected.clear();renderList();});
+  document.getElementById('batchSfsCancelBtn').addEventListener('click',()=>exitBatchSfsMode());
+  document.getElementById('batchSfsSelectAllBtn').addEventListener('click',()=>{const docs=sortedApplicants(),allSelected=docs.length&&docs.every(a=>batchSfsSelected.has(a.id));docs.forEach(a=>{if(allSelected)batchSfsSelected.delete(a.id);else batchSfsSelected.add(a.id);});renderList();});
+  document.getElementById('batchSfsGenerateBtn').addEventListener('click',()=>{
+    const selected=applicants.filter(a=>batchSfsSelected.has(a.id)&&a.name);
+    if(!selected.length)return;
+    if(!window.__PIBASE_SFS__||typeof window.__PIBASE_SFS__.openBatch!=='function'){alert('The Stripes generator is still loading. Refresh PIBASE and try again.');return;}
+    window.__PIBASE_SFS__.openBatch(selected.map(a=>({id:a.id,name:a.name,rank:a.rank||''})));
+  });
+  document.getElementById('folderNav').addEventListener('click',e=>{const button=e.target.closest('[data-folder]');if(!button)return;batchSfsMode=false;batchSfsSelected.clear();currentFolder=button.dataset.folder;renderList();});
   sortMode.addEventListener('change',renderList);document.getElementById('addBtn').addEventListener('click',()=>openDetail(null));document.getElementById('backBtn').addEventListener('click',()=>{showScreen('list');currentId=null;});
 
   let currentId=null,currentStage=STAGES[0],currentNotes=[],unsubscribeNotes=null;

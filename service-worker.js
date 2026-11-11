@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v31';
+const CACHE_NAME = 'pibase-app-v32';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -33,6 +33,7 @@ const APP_SHELL = [
 ].map(scopeUrl);
 
 const PDF_LIB_URL = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 
 const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
@@ -44,7 +45,7 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await Promise.all(APP_SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))));
-    await Promise.allSettled([...FIREBASE_SDK, PDF_LIB_URL].map(url => cache.add(new Request(url, { mode: 'cors', cache: 'reload' }))));
+    await Promise.allSettled([...FIREBASE_SDK, PDF_LIB_URL, JSZIP_URL].map(url => cache.add(new Request(url, { mode: 'cors', cache: 'reload' }))));
   })());
 });
 
@@ -121,7 +122,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.origin === 'https://cdn.jsdelivr.net' && request.url === PDF_LIB_URL) {
+  if (url.origin === 'https://cdn.jsdelivr.net' && (request.url === PDF_LIB_URL || request.url === JSZIP_URL)) {
     event.respondWith(cacheFirst(request));
     return;
   }
