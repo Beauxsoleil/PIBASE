@@ -60,8 +60,13 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(api.aftFields)), {
 assert.strictEqual(api.ageBand(17), '17-21');
 assert.strictEqual(api.ageBand(25), '22-26');
 assert.strictEqual(api.ageBand(62), '62+');
+assert.strictEqual(api.normalizeTimeValue('153'), '1:53');
+assert.strictEqual(api.normalizeTimeValue('1803'), '18:03');
+assert.strictEqual(api.normalizeTimeValue('2.08'), '2:08');
 assert.strictEqual(api.timeToSeconds('1:53'), 113);
+assert.strictEqual(api.timeToSeconds('153'), 113);
 assert.strictEqual(api.timeToSeconds('18:03'), 1083);
+assert.strictEqual(api.timeToSeconds('1803'), 1083);
 assert.strictEqual(api.timeToSeconds('1:99'), null);
 
 const aftData = JSON.parse(await readFile(join(root, 'aft-scoring-data.json'), 'utf8'));
@@ -95,8 +100,10 @@ assert.strictEqual(api.scoreEventWithData(aftData,'MDL','230',25,'F','general'),
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','120',25,'F','general'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','150',25,'F','combat'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'SDC','1:32',25,'M','general'),99);
+assert.strictEqual(api.scoreEventWithData(aftData,'SDC','132',25,'M','general'),99);
 assert.strictEqual(api.scoreEventWithData(aftData,'SDC','2:31',25,'M','general'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'2MR','13:47',25,'M','general'),99);
+assert.strictEqual(api.scoreEventWithData(aftData,'2MR','1347',25,'M','general'),99);
 assert.strictEqual(api.scoreEventWithData(aftData,'2MR','19:45',25,'M','general'),60);
 assert.strictEqual(api.scoreEventWithData(aftData,'2MR','22:45',25,'F','general'),60);
 
@@ -134,17 +141,18 @@ assert.ok(worker.includes("'assets/stripes-for-skills-template.pdf'"));
 assert.ok(worker.includes("'aft-scoring-data.json'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
 assert.ok(worker.includes('jszip@3.10.1'));
-assert.match(worker, /pibase-app-v34/);
+assert.match(worker, /pibase-app-v35/);
 assert.match(worker, /const isAppCode = [^\n]+aft-scoring-data\\\.json/);
 
 const template = await readFile(join(root, 'assets', 'stripes-for-skills-template.pdf'));
-assert.strictEqual(template.length, 413627);
-assert.strictEqual(createHash('sha256').update(template).digest('hex'), 'd36313fff84e46f5e0fc2d1810df9c6668a273c14f0aaa87fb511ed7e0dfec46');
+assert.strictEqual(template.length, 271501);
+assert.strictEqual(createHash('sha256').update(template).digest('hex'), 'd5a48f37d7ec6113aa9c532a755aa5a746ce86138a4a62f333e525d745047d2d');
 
 assert.match(source, /ENLISTMENT_FIELDS/);
 assert.match(source, /scoreAftWithData/);
 assert.match(source, /AFT_SCORING_URL/);
 assert.match(source, /AFT_SOURCE_SHA256/);
+assert.doesNotMatch(source, /id="sfsAft(?:SDC|PLK|2MR)"[^>]+inputmode="numeric"/);
 assert.match(source, /setText\(form, 'Meters', '', 7\)/);
 assert.match(source, /setText\(form, 'Points_2', '', 7\)/);
 assert.match(source, /form\.updateFieldAppearances\(font\)/);

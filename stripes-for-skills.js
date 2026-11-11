@@ -154,8 +154,16 @@
     return '62+';
   }
 
+  function normalizeTimeValue(value) {
+    var text = String(value || '').trim().replace(/\s+/g, '');
+    var separated = text.match(/^(\d{1,2})[:.](\d{2})$/);
+    if (separated) return separated[1] + ':' + separated[2];
+    if (/^\d{3,4}$/.test(text)) return text.slice(0, -2) + ':' + text.slice(-2);
+    return text;
+  }
+
   function timeToSeconds(value) {
-    var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    var match = normalizeTimeValue(value).match(/^(\d{1,2}):(\d{2})$/);
     if (!match) return null;
     var minutes = Number(match[1]), seconds = Number(match[2]);
     if (seconds > 59) return null;
@@ -575,9 +583,9 @@
     return {
       MDL: document.getElementById('sfsAftMDL').value.trim(),
       HRP: document.getElementById('sfsAftHRP').value.trim(),
-      SDC: document.getElementById('sfsAftSDC').value.trim(),
-      PLK: document.getElementById('sfsAftPLK').value.trim(),
-      '2MR': document.getElementById('sfsAft2MR').value.trim()
+      SDC: normalizeTimeValue(document.getElementById('sfsAftSDC').value),
+      PLK: normalizeTimeValue(document.getElementById('sfsAftPLK').value),
+      '2MR': normalizeTimeValue(document.getElementById('sfsAft2MR').value)
     };
   }
 
@@ -672,9 +680,9 @@
           '<div class="helper" style="margin-top:8px">Current AFT: MDL, HRP, SDC, Plank, 2MR. The old Standing Power Throw row stays blank.</div>' +
           '<div class="sfs-aft-event"><label>3RM Deadlift (lb)<input id="sfsAftMDL" type="number" min="0" step="10" inputmode="numeric"></label><div></div><div class="sfs-aft-points" id="sfsAftMDLPoints">—</div></div>' +
           '<div class="sfs-aft-event"><label>Hand-Release Push-Up (reps)<input id="sfsAftHRP" type="number" min="0" step="1" inputmode="numeric"></label><div></div><div class="sfs-aft-points" id="sfsAftHRPPoints">—</div></div>' +
-          '<div class="sfs-aft-event"><label>Sprint-Drag-Carry<input id="sfsAftSDC" type="text" inputmode="numeric" placeholder="1:53"></label><div></div><div class="sfs-aft-points" id="sfsAftSDCPoints">—</div></div>' +
-          '<div class="sfs-aft-event"><label>Plank<input id="sfsAftPLK" type="text" inputmode="numeric" placeholder="2:08"></label><div></div><div class="sfs-aft-points" id="sfsAftPLKPoints">—</div></div>' +
-          '<div class="sfs-aft-event"><label>2-Mile Run<input id="sfsAft2MR" type="text" inputmode="numeric" placeholder="18:03"></label><div></div><div class="sfs-aft-points" id="sfsAft2MRPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>Sprint-Drag-Carry<input id="sfsAftSDC" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="1:53 or 153"></label><div></div><div class="sfs-aft-points" id="sfsAftSDCPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>Plank<input id="sfsAftPLK" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="2:08 or 208"></label><div></div><div class="sfs-aft-points" id="sfsAftPLKPoints">—</div></div>' +
+          '<div class="sfs-aft-event"><label>2-Mile Run<input id="sfsAft2MR" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="18:03 or 1803"></label><div></div><div class="sfs-aft-points" id="sfsAft2MRPoints">—</div></div>' +
           '<div class="sfs-aft-summary" id="sfsAftSummary">Enter all five AFT event results to calculate points.</div>' +
         '</div></details>' +
         '<div class="sfs-actions"><button class="btn btn-secondary" id="sfsCancelBtn" type="button">Cancel</button><button class="btn btn-primary" id="sfsGenerateBtn" type="button">Generate Official PDF</button></div>' +
@@ -844,7 +852,8 @@
     var raw = {};
     AFT_EVENTS.forEach(function (event) {
       var input = row.querySelector('[data-batch-aft-event="' + event + '"]');
-      raw[event] = input ? input.value.trim() : '';
+      var value = input ? input.value.trim() : '';
+      raw[event] = event === 'SDC' || event === 'PLK' || event === '2MR' ? normalizeTimeValue(value) : value;
     });
     return raw;
   }
@@ -1114,9 +1123,9 @@
         '<div class="sfs-aft-meta"><div><label>AFT test date</label><input type="date" data-batch-aft-date></div><div><label>Age</label><input type="number" min="17" max="100" data-batch-aft-age></div><div><label>Sex</label><select data-batch-aft-sex><option value="M">Male</option><option value="F">Female</option></select></div><div><label>Standard</label><select data-batch-aft-standard><option value="general">General (300)</option><option value="combat">Combat (350)</option></select></div></div>' +
         '<div class="sfs-aft-event"><label>MDL lb<input type="number" min="0" step="10" data-batch-aft-event="MDL"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="MDL">—</div></div>' +
         '<div class="sfs-aft-event"><label>HRP reps<input type="number" min="0" step="1" data-batch-aft-event="HRP"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="HRP">—</div></div>' +
-        '<div class="sfs-aft-event"><label>SDC<input type="text" placeholder="1:53" data-batch-aft-event="SDC"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="SDC">—</div></div>' +
-        '<div class="sfs-aft-event"><label>Plank<input type="text" placeholder="2:08" data-batch-aft-event="PLK"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="PLK">—</div></div>' +
-        '<div class="sfs-aft-event"><label>2MR<input type="text" placeholder="18:03" data-batch-aft-event="2MR"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="2MR">—</div></div>' +
+        '<div class="sfs-aft-event"><label>SDC<input type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="1:53 or 153" data-batch-aft-event="SDC"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="SDC">—</div></div>' +
+        '<div class="sfs-aft-event"><label>Plank<input type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="2:08 or 208" data-batch-aft-event="PLK"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="PLK">—</div></div>' +
+        '<div class="sfs-aft-event"><label>2MR<input type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="18:03 or 1803" data-batch-aft-event="2MR"></label><div></div><div class="sfs-aft-points" data-batch-aft-points="2MR">—</div></div>' +
         '<div class="sfs-aft-summary" data-batch-aft-summary>Enter all five results to calculate points.</div></div>';
       var ageInput = aft.querySelector('[data-batch-aft-age]');
       ageInput.value = record && record.age ? record.age : '';
@@ -1184,6 +1193,7 @@
     aftFields: JSON.parse(JSON.stringify(AFT_FIELDS)),
     aftEvents: AFT_EVENTS.slice(),
     ageBand: ageBand,
+    normalizeTimeValue: normalizeTimeValue,
     timeToSeconds: timeToSeconds,
     scoreEventWithData: scoreEventWithData,
     scoreAftWithData: scoreAftWithData,
