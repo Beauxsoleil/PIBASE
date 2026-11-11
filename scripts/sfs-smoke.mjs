@@ -49,7 +49,7 @@ assert.ok(api.officialWhiteFields.includes('InitialsDate of CompletionEvaluate a
 assert.ok(!api.officialWhiteFields.includes('Points_6'));
 assert.ok(!api.officialRedFields.includes('InitialsDate of CompletionDrill and Ceremony STRM Red Phase'));
 
-assert.deepStrictEqual(api.aftEvents, ['MDL','HRP','SDC','PLK','2MR']);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(api.aftEvents)), ['MDL','HRP','SDC','PLK','2MR']);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(api.aftFields)), {
   MDL:{raw:'LBS',score:'Text1',date:'Points'},
   HRP:{raw:'Repitions',score:'Text3',date:'Points_3'},
@@ -66,9 +66,28 @@ assert.strictEqual(api.timeToSeconds('1:99'), null);
 
 const aftData = JSON.parse(await readFile(join(root, 'aft-scoring-data.json'), 'utf8'));
 assert.strictEqual(aftData.version, '250601');
+assert.strictEqual(aftData.approved, '2025-05-01');
 assert.strictEqual(aftData.effective, '2025-06-01');
+assert.strictEqual(aftData.provenance.officialSha256, '572a54ffce1a084bf935fc8e9ea80a316de7e6edc824d6d8517e8944872ad750');
+assert.match(aftData.provenance.officialSource, /goarmy\.com/);
 assert.deepStrictEqual(aftData.ageBands, ['17-21','22-26','27-31','32-36','37-41','42-46','47-51','52-56','57-61','62+']);
 assert.deepStrictEqual(Object.keys(aftData.events).sort(), ['2MR','HRP','MDL','PLK','SDC']);
+
+const descending = (high, low = 0) => Array.from({length: high - low + 1}, (_, i) => high - i);
+const strengthRows = [...descending(100, 60), 50, 40, 30, 20, 10, 0];
+assert.deepStrictEqual(aftData.events.MDL.publishedPointRows, strengthRows);
+assert.deepStrictEqual(aftData.events.HRP.publishedPointRows, strengthRows);
+for (const event of ['SDC','PLK','2MR']) {
+  assert.deepStrictEqual(aftData.events[event].publishedPointRows, descending(100));
+}
+
+const rowsFor = (event, age, sex) => new Map(aftData.events[event].columns[age][sex]);
+assert.strictEqual(rowsFor('SDC','22-26','M').get(99), '1:32');
+assert.strictEqual(rowsFor('SDC','22-26','M').get(98), '1:33');
+assert.strictEqual(rowsFor('PLK','22-26','F').get(99), '3:32');
+assert.strictEqual(rowsFor('PLK','22-26','F').get(98), '3:29');
+assert.strictEqual(rowsFor('2MR','22-26','M').get(99), '13:47');
+assert.strictEqual(rowsFor('2MR','22-26','M').get(98), '13:55');
 
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','350',25,'M','general'),100);
 assert.strictEqual(api.scoreEventWithData(aftData,'MDL','345',25,'M','general'),99);
@@ -115,7 +134,8 @@ assert.ok(worker.includes("'assets/stripes-for-skills-template.pdf'"));
 assert.ok(worker.includes("'aft-scoring-data.json'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
 assert.ok(worker.includes('jszip@3.10.1'));
-assert.match(worker, /pibase-app-v33/);
+assert.match(worker, /pibase-app-v34/);
+assert.match(worker, /const isAppCode = [^\n]+aft-scoring-data\\\.json/);
 
 const template = await readFile(join(root, 'assets', 'stripes-for-skills-template.pdf'));
 assert.strictEqual(template.length, 413627);
@@ -124,6 +144,7 @@ assert.strictEqual(createHash('sha256').update(template).digest('hex'), 'd36313f
 assert.match(source, /ENLISTMENT_FIELDS/);
 assert.match(source, /scoreAftWithData/);
 assert.match(source, /AFT_SCORING_URL/);
+assert.match(source, /AFT_SOURCE_SHA256/);
 assert.match(source, /setText\(form, 'Meters', '', 7\)/);
 assert.match(source, /setText\(form, 'Points_2', '', 7\)/);
 assert.match(source, /form\.updateFieldAppearances\(font\)/);

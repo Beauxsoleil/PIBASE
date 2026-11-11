@@ -12,6 +12,7 @@
   var JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
   var OFFICIAL_TEMPLATE_URL = './assets/stripes-for-skills-template.pdf';
   var AFT_SCORING_URL = './aft-scoring-data.json';
+  var AFT_SOURCE_SHA256 = '572a54ffce1a084bf935fc8e9ea80a316de7e6edc824d6d8517e8944872ad750';
   var TEMPLATE_STORAGE_KEY = 'pibase.sfs.officialTemplate.v1';
   var INITIALS = 'JV';
   var RECRUITER_LINE = 'SSG VIOLA/ DET 3 RSP';
@@ -214,7 +215,15 @@
       if (!response.ok) throw new Error('AFT scoring tables are unavailable.');
       return response.json();
     }).then(function (data) {
-      if (!data || data.version !== '250601' || !data.events) throw new Error('AFT scoring table version is invalid.');
+      var expectedRows = { MDL:47, HRP:47, SDC:101, PLK:101, '2MR':101 };
+      var complete = data && data.version === '250601' && data.events &&
+        data.provenance && data.provenance.officialSha256 === AFT_SOURCE_SHA256 &&
+        AFT_EVENTS.every(function (event) {
+          var eventData = data.events[event];
+          return eventData && Array.isArray(eventData.publishedPointRows) &&
+            eventData.publishedPointRows.length === expectedRows[event];
+        });
+      if (!complete) throw new Error('AFT scoring table version is invalid or incomplete.');
       return data;
     });
     return aftDataPromise;

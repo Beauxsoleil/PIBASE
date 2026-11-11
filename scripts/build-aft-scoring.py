@@ -2,13 +2,18 @@
 """Build PIBASE AFT scoring data from the official U.S. Army scoring PDF.
 
 Source is the GoArmy-hosted HQDA EXORD scoring-table annex. The generated JSON
-preserves every published point row and every dash; no interpolation is added.
+preserves every published scoring threshold; no interpolation is added.
 """
-import hashlib, json, re, sys, urllib.request
+import argparse
+import hashlib
+import json
+import re
+import urllib.request
 from pathlib import Path
 import pdfplumber
 
 SOURCE_URL = "https://www.goarmy.com/content/dam/goarmy/files/HQDA_EXORD_218-25__CC__Annex_B_-_Scoring_Tables__Final_.pdf"
+SOURCE_SHA256 = "572a54ffce1a084bf935fc8e9ea80a316de7e6edc824d6d8517e8944872ad750"
 AGE_BANDS = ["17-21","22-26","27-31","32-36","37-41","42-46","47-51","52-56","57-61","62+"]
 EVENT_PAGES = {
     "MDL": [0],
@@ -32,8 +37,15 @@ EXPECTED_100 = {
     "PLK": ["3:40","3:40","3:35","3:35","3:30","3:30","3:25","3:25","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20","3:20"],
     "2MR": ["13:22","16:00","13:25","15:30","13:25","15:30","13:42","15:48","13:42","15:51","14:05","16:00","14:30","16:30","15:09","16:59","15:28","17:18","15:28","17:18"],
 }
-# Minimum number of distinct points rows expected from the official tables.
-MIN_ROWS = {"MDL":65,"HRP":55,"SDC":95,"PLK":95,"2MR":95}
+# MDL and HRP publish every row from 100 through 60, then the ten-point
+# anchors below 60. The timed events publish every row from 100 through 0.
+EXPECTED_POINTS = {
+    "MDL": set(range(60, 101)) | {0, 10, 20, 30, 40, 50},
+    "HRP": set(range(60, 101)) | {0, 10, 20, 30, 40, 50},
+    "SDC": set(range(0, 101)),
+    "PLK": set(range(0, 101)),
+    "2MR": set(range(0, 101)),
+}
 TOKEN_RE = re.compile(r"---|\d+:\d{2}|\d+")
 
 def download():
@@ -81,8 +93,11 @@ def extract_rows(pdf_path):
 def validate(rows_by_event):
     for event in EVENT_PAGES:
         rows=rows_by_event[event]
-        if len(rows) < MIN_ROWS[event]:
-            raise RuntimeError(f"{event}: parsed only {len(rows)} point rows; expected at least {MIN_ROWS[event]}")
+        actual_points=set(rows)
+        if actual_points != EXPECTED_POINTS[event]:
+            missing=sorted(EXPECTED_POINTS[event] - actual_points, reverse=True)
+            extra=sorted(actual_points - EXPECTED_POINTS[event], reverse=True)
+            raise RuntimeError(f"{event}: point rows mismatch; missing={missing}, extra={extra}")
         if rows.get(60) != EXPECTED_60[event]:
             raise RuntimeError(f"{event}: official 60-point anchor mismatch: {rows.get(60)}")
         if rows.get(100) != EXPECTED_100[event]:
@@ -90,9 +105,13 @@ def validate(rows_by_event):
         if not all(0 <= p <= 100 for p in rows):
             raise RuntimeError(f"{event}: invalid point key found")
 
-def main(out_path):
-    pdf_bytes=download()
+def main(out_path, source_pdf=None):
+    pdf_bytes=Path(source_pdf).read_bytes() if source_pdf else download()
     source_sha=hashlib.sha256(pdf_bytes).hexdigest()
+    if source_sha != SOURCE_SHA256:
+        raise RuntimeError(
+            f"Official scoring PDF SHA-256 changed: expected {SOURCE_SHA256}, got {source_sha}"
+        )
     tmp=Path(out_path).with_suffix(".official.pdf")
     tmp.write_bytes(pdf_bytes)
     try:
@@ -103,7 +122,7 @@ def main(out_path):
 
     out={
         "version":"250601",
-        "approved":"2025-05-15",
+        "approved":"2025-05-01",
         "effective":"2025-06-01",
         "ageBands":AGE_BANDS,
         "provenance":{
@@ -123,7 +142,11 @@ def main(out_path):
                     raw=vals[offset]
                     if raw!="---":
                         columns[age][sex].append([pts,raw])
-        out["events"][event]={"direction":DIRECTION[event],"columns":columns}
+        out["events"][event]={
+            "direction":DIRECTION[event],
+            "publishedPointRows":sorted(rows.keys(),reverse=True),
+            "columns":columns,
+        }
 
     Path(out_path).write_text(json.dumps(out,separators=(",",":"),sort_keys=True)+"\n")
     print(f"Wrote {out_path}; official PDF SHA-256 {source_sha}")
@@ -132,4 +155,8 @@ def main(out_path):
               "stored cells", sum(len(v[s]) for v in out["events"][event]["columns"].values() for s in ("M","F")))
 
 if __name__=="__main__":
-    main(sys.argv[1] if len(sys.argv)>1 else "aft-scoring-data.json")
+    parser=argparse.ArgumentParser()
+    parser.add_argument("output",nargs="?",default="aft-scoring-data.json")
+    parser.add_argument("--source-pdf",help="Use an already-downloaded copy of the pinned official PDF")
+    args=parser.parse_args()
+    main(args.output,args.source_pdf)
