@@ -28,7 +28,12 @@ EXPECTED_60 = {
 TOKEN_RE = re.compile(r"---|\d+:\d{2}|\d+")
 
 def download():
-    req=urllib.request.Request(SOURCE_URL,headers={"User-Agent":"PIBASE-AFT-table-builder/1.0"})
+    req=urllib.request.Request(SOURCE_URL,headers={
+        "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36",
+        "Referer":"https://www.army.mil/aft/",
+        "Accept":"application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+        "Accept-Language":"en-US,en;q=0.9",
+    })
     with urllib.request.urlopen(req,timeout=30) as r:
         data=r.read()
     if not data.startswith(b"%PDF"):
