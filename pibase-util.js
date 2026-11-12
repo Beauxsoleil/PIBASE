@@ -41,7 +41,7 @@ export function applicantNeedsReview(applicant, now = Date.now()) {
 // Missing flags are active by default. Legacy archive-folder records remain
 // archived even if they predate the explicit boolean field.
 export function isArchived(applicant) {
-  return applicant?.archived === true || Boolean(applicant?.archiveFolder);
+  return applicant?.archived === true || Boolean(applicant?.archiveFolder) || applicant?.statusStage === 'Enlisted';
 }
 
 // "YYYY-MM-DD" -> local-midnight Date, or null when malformed/empty.
