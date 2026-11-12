@@ -44,6 +44,50 @@ export function isArchived(applicant) {
   return applicant?.archived === true || Boolean(applicant?.archiveFolder) || applicant?.statusStage === 'Enlisted';
 }
 
+// Enlisted-folder membership, shared by the phone list, the kiosk mission
+// count, and the territory screen: filed in the Enlisted folder, or at the
+// Enlisted stage unless deliberately filed in Cowards / Previous FY. (A
+// deliberate folder placement always wins over the stage.)
+export function isEnlisted(applicant) {
+  return applicant?.archiveFolder === 'enlisted'
+    || (applicant?.statusStage === 'Enlisted'
+      && applicant?.archiveFolder !== 'cowards'
+      && applicant?.archiveFolder !== 'previousFY');
+}
+
+export function countEnlisted(applicants) {
+  return (applicants || []).filter(isEnlisted).length;
+}
+
+// Filing decision for the Enlisted folder, shared by the phone editor's save
+// path so the rule is unit-tested in one place. Returns the archive fields to
+// merge into the save payload, or null when the applicant is deliberately
+// filed elsewhere (Cowards / Previous FY keep their folder even at the
+// Enlisted stage). archivedAt is null when the caller must stamp it, and
+// previousStage is null for a brand-new applicant with no prior stage.
+export function enlistedFileUpdate(previous) {
+  if (previous?.archiveFolder && previous.archiveFolder !== 'enlisted') return null;
+  return {
+    archived: true,
+    archiveFolder: 'enlisted',
+    archivedAt: previous?.archivedAt ?? null,
+    previousStage: previous ? (previous.previousStage || previous.statusStage || 'Q&E') : null,
+    archivedFiscalYear: null,
+  };
+}
+
+// Stage an enlisted applicant returns to on restore: their previous stage
+// when it was a real recruiting stage, otherwise Q&E (the stage before
+// enlistment). Never returns 'Enlisted', so a restore cannot re-file.
+// Returns undefined when there is no stage to restore (the caller omits it).
+export function restoreStageFor(applicant) {
+  if (applicant?.statusStage === 'Enlisted') {
+    const prev = applicant?.previousStage;
+    return prev && prev !== 'Enlisted' ? prev : 'Q&E';
+  }
+  return applicant?.statusStage || undefined;
+}
+
 // "YYYY-MM-DD" -> local-midnight Date, or null when malformed/empty.
 export function parseDateOnly(v) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return null;

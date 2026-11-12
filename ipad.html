@@ -182,8 +182,15 @@
             if (error === 401) needLogin();
           } else {
             refreshRetries = 0;
+            // Enlisted applicants are archived, so they leave the active roster
+            // below, but they still count toward the mission total and the
+            // territory matrix. Keep them aside (same updatedAt requirement
+            // as the active filter); a deliberate Cowards / Previous FY
+            // placement wins over the stage, matching the phone app.
+            next.enlistedDocs = next.applicants.filter(function (a) { return own(a,'updatedAt') && (a.archiveFolder === 'enlisted' || (a.statusStage === 'Enlisted' && a.archiveFolder !== 'cowards' && a.archiveFolder !== 'previousFY')); });
             next.applicants = next.applicants.filter(function (a) { return a.archived !== true && !a.archiveFolder && own(a,'updatedAt'); });
             next.applicants.forEach(function (a) { if (a.statusStage === 'DEP') a.statusStage = 'Q&E'; });
+            next.enlistedDocs.forEach(function (a) { if (a.statusStage === 'DEP') a.statusStage = 'Q&E'; });
             next.applicants.sort(function (a,b) { return stamp(b.updatedAt)-stamp(a.updatedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
             next.reminderDay = day; state = next; lastGood = Date.now(); failure = ''; rebuild();
           }
@@ -246,12 +253,20 @@
     var target = Math.max(0,Number(state.mission.target)||0), enlisted, remaining, events, summary;
     STAGES.forEach(function (s) { counts[s] = 0; });
     ['Twin Falls','Burley','Rupert','Filer','Other','Unassigned'].forEach(function (s) { areas[s] = [0,0,0,0]; });
-    a.forEach(function (v) {
-      var due = dayDate(v.nextActionDate), area = String(v.generalArea || v.area || v.location || '').trim(), group;
+    // Stage counts and the territory matrix cover active applicants plus
+    // filed-enlisted ones; legacy unfiled Enlisted records are already in
+    // the active list, so only filed ones are added (no double count).
+    // Follow-ups stay active-only: enlisted applicants need no follow-up.
+    var counted = a.concat((state.enlistedDocs || []).filter(function (v) { return v.archived === true || !!v.archiveFolder; }));
+    counted.forEach(function (v) {
+      var area = String(v.generalArea || v.area || v.location || '').trim(), group;
       if (own(counts,v.statusStage)) counts[v.statusStage]++;
       if (!area) area = 'Unassigned'; else if (!own(areas,area)) area = 'Other';
       group = v.statusStage === 'Enlisted' ? 3 : v.statusStage === 'Q&E' ? 2 : ['Processing Authorized','Processing Scheduled','Waiver'].indexOf(v.statusStage) >= 0 ? 1 : 0;
       areas[area][group]++;
+    });
+    a.forEach(function (v) {
+      var due = dayDate(v.nextActionDate);
       if (v.nextAction && due && due <= today+30*86400000) follow.push({time:due,title:v.name || 'Unnamed',detail:(due < today ? 'OVERDUE · ' : '')+v.nextActionDate+' · '+v.nextAction+' · '+(v.statusStage || '')});
     });
     addPages(next,'Applicants ('+a.length+')',a,4,card);
@@ -260,8 +275,9 @@
     addPages(next,'Today / Follow-ups',follow,5,function (e) { return panel(e.title,esc(e.detail)); });
     addPages(next,'Calendar · next 7 days'+(calendarFailed ? ' · cached' : ''),calendar.filter(function (e) { return e.time >= today && e.time < today+7*86400000; }),5,function (e) { return panel(e.title,esc(e.when+' · '+e.location)); });
     enlisted = counts.Enlisted; remaining = Math.max(0,target-enlisted);
-    summary = '<div class="big">'+enlisted+' / '+(target || '—')+'</div><p>'+remaining+' remaining · '+(target ? Math.round(enlisted/target*100)+'%' : 'Target not set')+' · '+(a.length-enlisted)+' active</p>';
-    summary += STAGES.map(function (s) { return '<div class="row">'+esc(s)+' <strong class="right">'+counts[s]+'</strong><div class="bar"><div class="fill" style="width:'+(a.length ? counts[s]/a.length*100 : 0)+'%"></div></div></div>'; }).join('');
+    var activeCount = a.filter(function (v) { return v.statusStage !== 'Enlisted'; }).length;
+    summary = '<div class="big">'+enlisted+' / '+(target || '—')+'</div><p>'+remaining+' remaining · '+(target ? Math.round(enlisted/target*100)+'%' : 'Target not set')+' · '+activeCount+' active</p>';
+    summary += STAGES.map(function (s) { return '<div class="row">'+esc(s)+' <strong class="right">'+counts[s]+'</strong><div class="bar"><div class="fill" style="width:'+(counted.length ? counts[s]/counted.length*100 : 0)+'%"></div></div></div>'; }).join('');
     next.push({title:'Pipeline / Mission',html:panel('FY'+String(fy).slice(-2)+' Recruiting Mission',summary)});
     events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts,resultNotes:r.resultNotes}; }));
     events.sort(function (x,y) { return dayDate(y.date)-dayDate(x.date); });

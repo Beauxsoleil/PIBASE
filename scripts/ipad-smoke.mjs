@@ -49,6 +49,24 @@ test('login, archive filter, stage alias, escaping and read-only requests',()=>{
  assert.match(b.el('inner').innerHTML,/&lt;img/);assert.match(b.el('inner').innerHTML,/&lt;script/);assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
  b.api.poll();assert.ok(b.requests.every(r=>r.method==='GET' && r.headers.Authorization==='Bearer fake-id'));
 });
+test('enlisted applicants count toward the mission but leave the active roster',()=>{
+ const b=boot();login(b);complete(b,[
+  applicant('A','Active One'),
+  applicant('B','Filed Enlisted',{statusStage:{stringValue:'Enlisted'},archived:{booleanValue:true},archiveFolder:{stringValue:'enlisted'}}),
+  applicant('C','Legacy Enlisted',{statusStage:{stringValue:'Enlisted'}}),
+  applicant('D','Cowards Enlisted',{statusStage:{stringValue:'Enlisted'},archived:{booleanValue:true},archiveFolder:{stringValue:'cowards'}}),
+ ]);
+ assert.match(b.el('section').textContent,/Applicants \(2\)/);
+ assert.equal(b.api.getState().applicants.length,2);
+ assert.equal(b.api.getState().enlistedDocs.length,2);
+ for(let i=0;i<360;i++)b.api.rotate();
+ assert.match(b.el('section').textContent,/Pipeline \/ Mission/);
+ assert.match(b.el('inner').innerHTML,/2 \/ —/);
+ assert.match(b.el('inner').innerHTML,/1 active/);
+ for(let i=0;i<240;i++)b.api.rotate();
+ assert.match(b.el('section').textContent,/Territory/);
+ assert.match(b.el('inner').innerHTML,/Unassigned<\/td><td>0<\/td><td>0<\/td><td>1<\/td><td>2<\/td>/);
+});
 test('all pages are collected before replacing visible data',()=>{
  const b=boot();login(b);const first=b.requests.find(r=>r.url.includes('/applicants?'));b.requests.splice(b.requests.indexOf(first),1);
  first.respond(200,{documents:[applicant('A','Page one')],nextPageToken:'cursor &?'});const second=b.requests.pop();assert.match(second.url,/pageToken=cursor%20%26%3F/);

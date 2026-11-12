@@ -28,6 +28,50 @@ assert.strictEqual(util.isArchived({ archived: false, archiveFolder: null }), fa
 assert.strictEqual(util.isArchived({ archived: true }), true);
 assert.strictEqual(util.isArchived({ archived: false, archiveFolder: 'previousFY' }), true);
 
+// Enlisted-stage applicants are archived too: they live in the Enlisted
+// folder, never in the active lists, even if the record predates the folder.
+assert.strictEqual(util.isArchived({ statusStage: 'Enlisted' }), true);
+assert.strictEqual(util.isArchived({ statusStage: 'Q&E' }), false);
+
+// Enlisted-folder membership: filed in the folder, or at the Enlisted stage
+// unless deliberately filed in Cowards / Previous FY (placement wins).
+assert.strictEqual(util.isEnlisted({ archiveFolder: 'enlisted', statusStage: 'Enlisted' }), true);
+assert.strictEqual(util.isEnlisted({ statusStage: 'Enlisted' }), true);
+assert.strictEqual(util.isEnlisted({ archiveFolder: 'enlisted', statusStage: 'Q&E' }), true);
+assert.strictEqual(util.isEnlisted({ archiveFolder: 'cowards', statusStage: 'Enlisted' }), false);
+assert.strictEqual(util.isEnlisted({ archiveFolder: 'previousFY', statusStage: 'Enlisted' }), false);
+assert.strictEqual(util.isEnlisted({ statusStage: 'Q&E' }), false);
+assert.strictEqual(util.isEnlisted({}), false);
+assert.strictEqual(util.countEnlisted([
+  { statusStage: 'Enlisted' },
+  { archiveFolder: 'enlisted', statusStage: 'Enlisted' },
+  { archiveFolder: 'cowards', statusStage: 'Enlisted' },
+  { statusStage: 'Q&E' },
+]), 2);
+
+// Filing decision: files new/active/legacy records; never overrides a
+// deliberate Cowards / Previous FY placement; preserves an existing stamp.
+assert.strictEqual(util.enlistedFileUpdate({ archiveFolder: 'cowards', statusStage: 'Q&E' }), null);
+assert.strictEqual(util.enlistedFileUpdate({ archiveFolder: 'previousFY', statusStage: 'Enlisted' }), null);
+assert.deepStrictEqual(util.enlistedFileUpdate(null), { archived: true, archiveFolder: 'enlisted', archivedAt: null, previousStage: null, archivedFiscalYear: null });
+const filed = util.enlistedFileUpdate({ statusStage: 'Q&E', archivedAt: '2026-11-01' });
+assert.strictEqual(filed.archived, true);
+assert.strictEqual(filed.archiveFolder, 'enlisted');
+assert.strictEqual(filed.archivedAt, '2026-11-01');
+assert.strictEqual(filed.previousStage, 'Q&E');
+assert.strictEqual(filed.archivedFiscalYear, null);
+assert.strictEqual(util.enlistedFileUpdate({ archiveFolder: 'enlisted', statusStage: 'Enlisted', previousStage: 'Q&E' }).previousStage, 'Q&E');
+// Legacy Enlisted-stage record with no folder is filed on save.
+assert.strictEqual(util.enlistedFileUpdate({ statusStage: 'Enlisted' }).archiveFolder, 'enlisted');
+
+// Restore: returns the previous stage, never re-files into Enlisted.
+assert.strictEqual(util.restoreStageFor({ statusStage: 'Enlisted', previousStage: 'Q&E' }), 'Q&E');
+assert.strictEqual(util.restoreStageFor({ statusStage: 'Enlisted', previousStage: 'Enlisted' }), 'Q&E');
+assert.strictEqual(util.restoreStageFor({ statusStage: 'Enlisted' }), 'Q&E');
+assert.strictEqual(util.restoreStageFor({ statusStage: 'Q&E' }), 'Q&E');
+assert.strictEqual(util.restoreStageFor({ archiveFolder: 'cowards', statusStage: 'Packet Prep' }), 'Packet Prep');
+assert.strictEqual(util.restoreStageFor({}), undefined);
+
 // Review flags are derived from the last update, with a precise 30-day
 // boundary and a createdAt fallback for legacy applicants.
 const now = Date.UTC(2026, 8, 8, 12);
