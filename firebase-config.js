@@ -4,7 +4,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore,
-  enableIndexedDbPersistence,
   collection,
   doc,
   addDoc,
@@ -52,14 +51,9 @@ export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// Offline persistence benefits both surfaces: the phone keeps field edits
-// usable without the MiFi puck, and the kiosk keeps serving cached applicants.
-enableIndexedDbPersistence(db).catch(error => {
-  if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
-    console.warn('PIBASE Firestore offline persistence unavailable', error);
-  }
-});
-
+// Firestore uses memory-only caching. Live listeners remain enabled; a restart while
+// offline will require reconnecting. Existing IndexedDB caches require a separate
+// controlled cleanup on previously used devices.
 // The TV reads Firestore without a recruiter login, so it signs in with an
 // anonymous credential: security rules then require request.auth != null
 // (protecting applicant PII from unauthenticated reads) instead of
