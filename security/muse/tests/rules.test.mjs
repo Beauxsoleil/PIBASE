@@ -77,6 +77,35 @@ test('Muse cannot archive, restore, or edit archived applicants', async () => {
     await assertFails(setDoc(doc(client, 'applicants', id, 'notes/new'), { text: 'Synthetic', createdAt: serverTimestamp(), ...audit() }));
   }
 });
+test('enlisted folder filing follows the owner-only archive boundary', async () => {
+  const owner = db('owner');
+  const muse = db('muse');
+  // Owner files an active applicant into the Enlisted folder (manual action).
+  await assertSucceeds(updateDoc(doc(owner, 'applicants/a'), {
+    archived: true, archiveFolder: 'enlisted', archivedAt: serverTimestamp(),
+    previousStage: 'Q&E', statusStage: 'Enlisted', updatedAt: serverTimestamp(),
+  }));
+  // Owner restores the enlisted applicant to Active with its previous stage.
+  await assertSucceeds(updateDoc(doc(owner, 'applicants/a'), {
+    archived: false, archiveFolder: null, archivedAt: null, archivedFiscalYear: null,
+    previousStage: null, statusStage: 'Q&E', updatedAt: serverTimestamp(),
+  }));
+  // Owner may create a new applicant directly at the Enlisted stage, filed.
+  await assertSucceeds(setDoc(doc(owner, 'applicants/enlisted-new'), {
+    name: 'Synthetic Enlisted', statusStage: 'Enlisted',
+    archived: true, archiveFolder: 'enlisted', archivedAt: serverTimestamp(),
+    previousStage: 'Q&E', updatedAt: serverTimestamp(),
+  }));
+  // Assistant cannot file into Enlisted, restore from it, or edit filed records.
+  await assertFails(updateDoc(doc(muse, 'applicants/a'), { ...audit(), archived: true, archiveFolder: 'enlisted', statusStage: 'Enlisted' }));
+  await assertFails(updateDoc(doc(muse, 'applicants/archived'), { ...audit(), archived: false, archiveFolder: null }));
+  await assertFails(updateDoc(doc(muse, 'applicants/enlisted-new'), { ...audit(), name: 'Changed' }));
+  // Sync worker cannot touch enlisted records either.
+  await assertFails(updateDoc(doc(db('sync'), 'applicants/enlisted-new'), { name: 'Changed', updatedBy: 'sync', updatedAt: serverTimestamp() }));
+  // Kiosk reads filed records (mission count) but cannot write them.
+  await assertSucceeds(getDoc(doc(db('kiosk', 'anonymous'), 'applicants/enlisted-new')));
+  await assertFails(updateDoc(doc(db('kiosk', 'anonymous'), 'applicants/enlisted-new'), { name: 'Changed' }));
+});
 test('Muse notes are append-only and need an active parent', async () => {
   const client = db('muse');
   const note = { text: 'Synthetic note', createdAt: serverTimestamp(), ...audit() };

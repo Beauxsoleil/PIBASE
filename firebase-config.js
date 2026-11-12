@@ -28,7 +28,7 @@ import {
 import { initAppointmentReminder } from './appointment-reminder.js';
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
-import { applicantNeedsReview, isArchived } from './pibase-util.js';
+import { applicantNeedsReview, isArchived, isEnlisted } from './pibase-util.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE",
@@ -89,7 +89,7 @@ function enhancementActive() {
 // Archived applicants remain in Firestore so their notes and history stay
 // attached to the original document. Every operational view treats them as
 // inactive, including legacy records that may only have an archive folder.
-export { isArchived };
+export { isArchived, isEnlisted };
 
 // Canonical stage name: legacy records may carry "DEP" (Delayed Entry Program),
 // which every screen treats as "Q&E". Normalizing at the data boundary means
@@ -118,6 +118,12 @@ export function watchApplicants(queryRef, onNext, onError) {
     const plainDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const activeDocs = plainDocs
       .filter(applicant => !isArchived(applicant))
+      .map(applicant => ({ ...applicant, statusStage: canonicalStage(applicant.statusStage) }));
+    // Enlisted applicants are archived, so they never appear in the active
+    // list above — but the territory screen still counts them toward the
+    // mission total. Expose them separately (disjoint from activeDocs).
+    window.__PIBASE_ENLISTED__ = plainDocs
+      .filter(isEnlisted)
       .map(applicant => ({ ...applicant, statusStage: canonicalStage(applicant.statusStage) }));
     window.__PIBASE_APPLICANTS__ = activeDocs;
     window.__PIBASE_APPLICANTS_READY__ = true;
