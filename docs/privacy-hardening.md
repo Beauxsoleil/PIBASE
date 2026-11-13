@@ -38,30 +38,38 @@ document, so the kiosk no longer reads `applicants` at all. It reads a
 sanitized mirror collection, `kioskApplicants`, and the kiosk role's read
 access to full applicant documents was removed from the rules.
 
-The mirror carries exactly these 14 fields:
+The mirror carries exactly these 11 fields (14 in the rules until the
+coordinated tightening in §8 — the rules still permit the three cut
+fields so SURVEY-written mirrors keep importing):
 
-`name`, `statusStage`, `age`, `generalArea`, `priorService`,
-`educationLevel`, `nextAction`, `nextActionDate`, `precedence`, `updatedAt`,
+`name`, `statusStage`, `generalArea`,
+`nextAction`, `nextActionDate`, `precedence`, `updatedAt`,
 `createdAt`, `archived`, `archiveFolder`, `updatedBy`
 
 Everything else is excluded: phone, email, medical/legal flags, waiver type
 and status, marital status, dependents, tattoos, latest note, notes,
 `physicalHealth`/`legalIssues`, survey provenance, school, previous stage,
 and `archivedFiscalYear` (cut in Nov 2026 — no kiosk screen reads it;
-Previous FY grouping is editor-only). `age`, `priorService`, and
-`educationLevel` stay because both kiosk card layouts render them;
-`updatedBy` stays because the rules use it to attribute mirror writes
-(`mirrorAttributed`) — it is never rendered. The allowlist is enforced
-twice: by `sanitizeForKiosk()` in `pibase-util.js` (client) and by
-`validKioskApplicant()` in `firestore.rules` (server, via a key whitelist
-— even the owner cannot put a phone number into a mirror through the
-client).
+Previous FY grouping is editor-only), and `age`, `priorService`, and
+`educationLevel` (cut in Nov 2026 — neither kiosk card layout renders
+them anymore; see §8). `generalArea` stays only because the legacy
+iPad's territory matrix counts applicants by area in aggregate; no kiosk
+screen renders an applicant's area. `updatedBy` stays because the rules
+use it to attribute mirror writes (`mirrorAttributed`) — it is never
+rendered. The allowlist is enforced twice: by `sanitizeForKiosk()` in
+`pibase-util.js` (client) and by `validKioskApplicant()` in
+`firestore.rules` (server, via a key whitelist — even the owner cannot
+put a phone number into a mirror through the client). The two lists are
+temporarily out of step: the client writes 11 fields, the rules still
+permit 14, until the coordinated tightening in §8.
 
 Kiosk rendering changes:
 
 - Pi detail view: the Contact section (phone + email) and the waiver badge
-  are removed. Cards show name, age/area/prior service/education, stage
-  rail, and the staleness-based Review badge only.
+  are removed. Cards show name, stage rail, and the staleness-based
+  Review badge only — age, general area, prior service, and education
+  were removed from cards and the detail view in Nov 2026 (see §8).
+  The detail view keeps name, next action, and the stage rail.
 - Pi events screen and iPad events slide: `resultNotes` (unrestricted free
   text) is no longer rendered, and event notes are no longer stored in the
   kiosk-readable parent docs at all — they live in reader-only
@@ -73,7 +81,9 @@ Kiosk rendering changes:
   them in `calendar.ics` (SUMMARY becomes "Private event", LOCATION is
   dropped), and the Pi, iPad, and events screen filter the same word stems
   at render time as defense in depth. See "Sensitive event text" below.
-- iPad cards: waiver badge and latest note removed.
+- iPad cards: waiver badge, latest note, age, general area, prior
+  service, and education removed. The territory slide still counts
+  applicants by area in aggregate (counts only, no names attached).
 - The territory screen was also fixed: it used to read the minimal
   Boudreaux feed (no `generalArea`), so every active applicant showed as
   Unassigned. It now reads the full applicant globals.
@@ -387,9 +397,10 @@ localStorage refresh token (see section 4).
   remains public. Sensitive SUMMARY/LOCATION values are now redacted by
   the sync workflow, but the feed is still world-readable — treat every
   summary as public.
-- **The kiosk still shows applicant names, ages, areas, and next actions.**
-  That is the minimum the board needs to function. Anyone who can see the
-  TV can see it.
+- **The kiosk still shows applicant names, next actions, and aggregate
+  area counts.** That is the minimum the board needs to function. Anyone
+  who can see the TV can see it. Ages, per-applicant areas, prior
+  service, and education no longer appear on any kiosk screen (§8).
 - **`updatedBy`/`updatedAt` are not an immutable audit log.** They record
   the latest writer, not every change. Notes are append-only for
   assistants, and survey review decisions are server-enforced, but
@@ -446,8 +457,10 @@ preserved #36's `enlistedUnfileUpdate` logic alongside the mirror writes).
 
 ## 7. Tests
 
-- `scripts/smoke.mjs`: `sanitizeForKiosk` allowlist (exact 14 keys, all
-  sensitive fields dropped, including the cut `archivedFiscalYear`),
+- `scripts/smoke.mjs`: `sanitizeForKiosk` allowlist (exact 11 keys, all
+  sensitive fields dropped, including the cut `archivedFiscalYear`,
+  `age`, `priorService`, and `educationLevel`; a SURVEY-written mirror
+  still carrying the cut fields must not count as drift),
   mirror comparison with timestamp tolerance, drift detection (missing /
   stale / extra), the mirror sync queue (failure recording, retry with
   fresh data, markFailed/clear), flag validation, legacy-field detection,
@@ -456,14 +469,17 @@ preserved #36's `enlistedUnfileUpdate` logic alongside the mirror writes).
   writes through the queue, that event notes live in the private
   subcollection, and that the calendar workflow redacts sensitive
   summaries.
-- `scripts/ipad-smoke.mjs`: 22 synthetic tests, including a poll that
+- `scripts/ipad-smoke.mjs`: 23 synthetic tests, including a poll that
   reads only `kioskApplicants`, a card that never renders a note or
-  waiver type even when the fixture carries them, and two sensitive-event
-  tests (the calendar parser drops a DUI hearing and a probation-office
-  check-in; the events slide drops a sensitive event and a sensitive
-  result).
+  waiver type even when the fixture carries them, a card that never
+  renders age, area, prior service, or education even when the fixture
+  carries them (while the territory slide still counts the area in
+  aggregate), and two sensitive-event tests (the calendar parser drops a
+  DUI hearing and a probation-office check-in; the events slide drops a
+  sensitive event and a sensitive result).
 - `scripts/ipad-browser-smoke.mjs`: Playwright fixture updated to the
-  sanitized collection; asserts no note/waiver rendering.
+  sanitized collection; asserts no note/waiver/age/area/prior-service/
+  education rendering on cards.
 - `security/muse/tests/rules.test.mjs` (emulator, CI only — 29 tests):
   kiosk reads mirrors but not applicants/notes/survey data (including no
   list access to `surveyLeadImports` and no access to event-notes
@@ -478,3 +494,102 @@ preserved #36's `enlistedUnfileUpdate` logic alongside the mirror writes).
   read back unchanged after edits, assistant clear attempts rejected).
 - The Firestore emulator cannot run on the development VM (sandbox RSTs
   loopback HTTP/2), so the rules suite is authoritative only in CI.
+
+## 8. Kiosk display minimization (Nov 13, 2026)
+
+Follow-up to the §1 overhaul: the kiosk screens showed more applicant
+detail than the board needs. Age, general area, prior service, and
+education came off both displays; the authenticated editor is untouched
+and still shows and edits all four fields.
+
+### What changed
+
+- **Pi (`display.html`):** the card meta line (age / area / prior
+  service / education) is gone; cards show name, the Review badge, and
+  the stage rail. The detail view lost the same meta line and the
+  "General area" section; it keeps name, next action, and the stage
+  rail. Dead CSS (`.meta-line`, `.detail-meta`) and the now-unused
+  `detailMeta` / `formatValue` helpers were removed.
+- **iPad (`ipad.html`):** the card meta line is gone (same four fields);
+  cards show name, the Review badge, and the stage rail. Dead `.meta`
+  CSS removed. ES5 throughout — no modern syntax was introduced.
+- **Mirror allowlist (`pibase-util.js`):** `sanitizeForKiosk` no longer
+  writes `age`, `priorService`, or `educationLevel`, so new and rebuilt
+  mirrors carry 11 fields instead of 14. `generalArea` stays because
+  the iPad territory matrix counts applicants by area — in aggregate
+  only (see below). The drift check (`mirrorMatchesApplicant`) compares
+  only the 11 live fields, so a stored mirror that still carries the
+  cut fields does not show up as stale.
+- **Service worker:** cache `pibase-app-v38` → `pibase-app-v39` so
+  clients pick up the new display code.
+
+### Why generalArea stays in the mirror
+
+The iPad territory slide ("Applicants by area") counts applicants per
+town (Twin Falls / Burley / Rupert / Filer / Other / Unassigned) by
+stage group. Those are aggregate counts — no name is attached to any
+area, and no card or detail screen shows an applicant's area. Removing
+`generalArea` from the mirror would delete a mission-counting view, so
+it stays until Joel decides the territory counts should go too. The
+smoke tests lock this in from both sides: no card may render
+`a.generalArea`, and the territory matrix must still count areas.
+
+### Rules tightening — proposed, NOT in this PR
+
+`validKioskApplicant()` in `firestore.rules` still permits all 14
+fields (`hasOnly` with the original list). Tightening it to the 11 live
+fields is the right end state — it would make the server enforce what
+the client already does — but it is a coordinated change, not a
+follow-on edit:
+
+1. **The SURVEY worker writes mirrors too.** Its `buildMirrorPayload`
+   (Beauxsoleil/SURVEY, `worker/sync.js`) still emits the 14-field
+   shape. If the rules dropped `age` / `priorService` /
+   `educationLevel` from the whitelist first, every SURVEY import would
+   fail its mirror write (`hasOnly` rejection) and land in review
+   instead of importing. The SURVEY worker must ship the 11-field
+   payload first (or at the same time), and its deploy must be verified
+   before the rules change.
+2. **Backfill before tightening.** Existing mirrors still carry the cut
+   fields (harmless — the displays ignore them and the drift check
+   ignores extra keys), and a `hasOnly` tightening only constrains new
+   writes, so no backfill is strictly required. Still, run **Rebuild
+   kiosk data** from the phone first so stored mirrors match the new
+   shape; it also proves the 11-field writes pass the current rules.
+3. **Rules publish needs Joel's explicit approval**, as always. Do not
+   publish on the strength of this doc alone.
+
+Proposed order when Joel approves: (a) SURVEY worker update merged +
+deployed + one synthetic import verified; (b) PIBASE PR removing the
+three fields from `validKioskApplicant()` (both rules copies) +
+rules-test updates, CI green; (c) Joel approves the rules publish;
+(d) publish via console or CLI; (e) verify a SURVEY import still
+mirrors and the kiosk still populates.
+
+### Deployment sequence (this PR — code only, no rules change)
+
+1. **Merge** after CI + Legacy iPad checks are green. No rules publish
+   is part of this PR.
+2. **Wait for GitHub Pages** to publish. The Pi kiosk picks up v39 on
+   its idle reload (about an hour) or on a manual browser reload; the
+   iPad picks it up on its daily reload.
+3. **Optional backfill:** from the phone, tap **Rebuild kiosk data**.
+   This rewrites every mirror in the 11-field shape and purges the cut
+   fields from stored mirrors. It is optional — without it, old mirrors
+   keep the cut fields, the displays ignore them, and the drift check
+   does not flag them. The next applicant save rewrites that record's
+   mirror in the new shape anyway.
+4. **Verify the kiosk:** roster cards show name + stage rail + Review
+   badge only; the Pi detail view shows name, next action, and stage
+   rail with no area section; the iPad territory slide still shows area
+   counts; mission and Enlisted counts are unchanged; mascots and
+   auto-refresh behave as before.
+
+### Rollback
+
+Revert the merge commit and wait for GitHub Pages to publish. No rules
+change is involved, so there is nothing to restore server-side, and no
+data migration is needed in either direction: 11-field mirrors satisfy
+the 14-field rules, and the old display code renders an empty meta line
+for mirrors that lack the cut fields. A **Rebuild kiosk data** after a
+rollback restores the 14-field mirrors.
