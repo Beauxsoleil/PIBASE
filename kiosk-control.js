@@ -9,6 +9,7 @@ if(isKiosk){
   document.head.appendChild(style);
   const overlay=document.createElement('div');overlay.id='pibaseVideoOverlay';
   const video=document.createElement('video');video.src='./assets/kiosk-1080p.mp4';video.autoplay=false;video.loop=true;video.muted=true;video.playsInline=true;video.preload='none';video.setAttribute('aria-label','Idaho National Guard kiosk video');overlay.appendChild(video);
+  video.addEventListener('error',()=>{window.__PIBASE_VIDEO_ERROR__=true;console.warn('Kiosk video failed to load or decode');});
   const install=()=>document.body.appendChild(overlay);
   if(document.body)install();else document.addEventListener('DOMContentLoaded',install,{once:true});
   let current=-1;
@@ -18,9 +19,9 @@ if(isKiosk){
     const wasVideo=current===6;current=index;
     if(index===6){
       document.querySelectorAll('.screen').forEach(el=>el.classList.remove('active'));
-      document.getElementById('detailView')?.classList.remove('open');
+      const detail=document.getElementById('detailView');if(detail){detail.classList.remove('open');detail.innerHTML='';}
       overlay.classList.add('active');document.body.classList.add('pibase-video-active');
-      video.play().catch(()=>{console.warn('Video autoplay blocked; waiting for interaction');});
+      video.play().then(()=>{window.__PIBASE_VIDEO_ERROR__=false;}).catch(()=>{console.warn('Video autoplay blocked; waiting for interaction');});
       window.dispatchEvent(new CustomEvent('pibase:screen-change',{detail:{id:'videoScreen',title:'Video'}}));
     }else{
       overlay.classList.remove('active');document.body.classList.remove('pibase-video-active');
@@ -44,6 +45,6 @@ if(isKiosk){
       if(!user){status.textContent='Sign in to control the kiosk.';return;}
       stop=onSnapshot(controlRef,snap=>{if(snap.exists()){const n=snap.data().screen;if(Number.isInteger(n)&&n>=0&&n<labels.length){select.value=String(n);status.textContent='Current kiosk selection: '+labels[n];}}else{select.value='3';status.textContent='Kiosk defaults to Pipeline / Mission.';}button.disabled=false;},error=>{status.textContent='Remote unavailable: '+(error.code||'permission error');button.disabled=true;});
     });
-    button.addEventListener('click',async()=>{const n=Number(select.value);if(!auth.currentUser||!Number.isInteger(n)||n<0||n>=labels.length)return;button.disabled=true;status.textContent='Sending…';try{await setDoc(controlRef,{screen:n,updatedBy:auth.currentUser.uid,updatedAt:serverTimestamp()});status.textContent='Sent: '+labels[n];}catch(error){status.textContent='Could not change kiosk: '+(error.code||'connection error');}finally{button.disabled=false;}});
+    button.addEventListener('click',async()=>{const n=Number(select.value);if(!auth.currentUser||!Number.isInteger(n)||n<0||n>=labels.length)return;button.disabled=true;status.textContent='Sending…';let settled=false;const timer=setTimeout(()=>{if(settled)return;button.disabled=false;status.textContent='Still sending — will apply when the phone reconnects.';},10000);try{await setDoc(controlRef,{screen:n,updatedBy:auth.currentUser.uid,updatedAt:serverTimestamp()});settled=true;clearTimeout(timer);status.textContent='Sent: '+labels[n];}catch(error){settled=true;clearTimeout(timer);status.textContent='Could not change kiosk: '+(error.code||'connection error');}finally{button.disabled=false;}});
   }
 }
