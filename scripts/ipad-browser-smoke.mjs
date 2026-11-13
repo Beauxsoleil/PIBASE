@@ -28,9 +28,12 @@ try{
    else if(u.startsWith('https://firestore.googleapis.com/')){
      assert.equal(r.method(),'GET');assert.equal(r.headers().authorization,'Bearer synthetic-token');
      if(fail)return route.fulfill({status:503,contentType:'application/json',body:'{}'});
-     if(u.includes('/applicants?')){
+     if(u.includes('/kioskApplicants?')){
        pages++;const second=u.includes('pageToken=');const number=second?2:1;
-       data={documents:[{name:'projects/demo/databases/(default)/documents/applicants/'+number,fields:{name:{stringValue:'SYNTHETIC Applicant '+number},updatedAt:{timestampValue:'2026-10-01T00:00:00Z'},statusStage:{stringValue:number===1?'Waiver':'DEP'},waiverType:{stringValue:'Practice only'},age:{integerValue:'22'},generalArea:{stringValue:'Twin Falls'},latestNote:{stringValue:number===1?'Long synthetic note. '.repeat(150):'<img src=x onerror=alert(1)> safely displayed as text.'}}}]};
+       // Privacy fixture: the mirror would never carry waiverType or
+       // latestNote, but even if it did, the display must not render them.
+       // Overflow is forced by a long rendered name, not by a note.
+       data={documents:[{name:'projects/demo/databases/(default)/documents/kioskApplicants/'+number,fields:{name:{stringValue:number===1?'SYNTHETIC Applicant 1 '+'Long synthetic name. '.repeat(100):'<img src=x onerror=alert(1)> safely displayed as text.'},updatedAt:{timestampValue:'2026-10-01T00:00:00Z'},statusStage:{stringValue:number===1?'Waiver':'DEP'},waiverType:{stringValue:'Practice only'},age:{integerValue:'22'},generalArea:{stringValue:'Twin Falls'},latestNote:{stringValue:'Long synthetic note. '.repeat(150)}}}]};
        if(!second)data.nextPageToken='page2';
      }else if(u.includes('/settings/'))return route.fulfill({status:404,contentType:'application/json',body:'{}'});
      else data={documents:[]};
@@ -43,6 +46,9 @@ try{
  await page.waitForFunction(()=>document.getElementById('status').textContent.indexOf('Connected')>=0);
  assert.equal(await page.locator('.card').count(),2);assert.equal(pages,2);
  assert.equal(await page.locator('.card img').count(),0);
+ const bodyText=await page.evaluate(()=>document.body.innerText);
+ assert.ok(!bodyText.includes('Practice only'),'waiver type must not render');
+ assert.ok(!bodyText.includes('Long synthetic note'),'latest note must not render');
  const bounds=await page.evaluate(()=>({w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,inner:document.getElementById('viewport').scrollHeight,available:document.getElementById('viewport').clientHeight}));
  assert.equal(bounds.w,1024);assert.equal(bounds.h,768);assert.ok(bounds.inner>bounds.available);
  await page.screenshot({path:process.env.PIBASE_IPAD_SCREENSHOT || '/tmp/pibase-ipad-synthetic.png'});
@@ -54,5 +60,5 @@ try{
  await page.locator('#signout').click();assert.equal(await page.locator('.card').count(),0);
  assert.equal(await page.evaluate(()=>localStorage.getItem('pibase.ipad.v1.session')),null);
  assert.deepEqual(errors,[]);
- console.log('PASS Chromium 1024x768: pagination, rendering, escaped notes, overflow scroll, outage retention, refresh after reload, sign-out. No live requests.');
+ console.log('PASS Chromium 1024x768: pagination, rendering, escaped names, no note/waiver rendering, overflow scroll, outage retention, refresh after reload, sign-out. No live requests.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}

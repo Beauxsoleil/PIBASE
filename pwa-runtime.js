@@ -1,5 +1,7 @@
 // Shared install/update/offline behavior for the phone editor and Pi kiosk.
-// Firebase handles cached records; this runtime keeps the application shell
+// Firestore persistence is disabled (memory-only cache): records stay
+// visible while the page is open, but a browser restart while offline
+// shows no applicant data. This runtime keeps the application shell
 // available and makes connectivity/update state visible to the user.
 
 const isKiosk = /\/display\.html$/.test(window.location.pathname);
@@ -62,7 +64,7 @@ function hidePhoneStatus() {
 }
 
 function updateConnectivity() {
-  if (!navigator.onLine) showPhoneStatus('Offline · cached data remains available', { offline: true });
+  if (!navigator.onLine) showPhoneStatus('Offline · records stay available until you close the app', { offline: true });
   else if (waitingWorker) showPhoneStatus('PIBASE update ready', {
     action: { label: 'Refresh', run: () => waitingWorker?.postMessage({ type: 'SKIP_WAITING' }) }
   });

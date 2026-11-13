@@ -68,7 +68,7 @@ export function initKioskRuntime() {
     if (!strip || !text) return;
     strip.classList.remove('offline', 'degraded');
     let label = 'Online · Data live';
-    if (!state.online) { strip.classList.add('offline'); label = state.applicants === 'cache' || state.applicants === 'ready' ? 'Offline · Cached data' : 'Offline · Waiting for cached data'; }
+    if (!state.online) { strip.classList.add('offline'); label = state.applicants === 'cache' || state.applicants === 'ready' ? 'Offline · Showing last data' : 'Offline · No data until reconnected'; }
     else if (state.applicants === 'error') { strip.classList.add('degraded'); label = 'Online · Applicant sync error'; }
     else if (state.applicants !== 'ready') { strip.classList.add('degraded'); label = 'Online · Applicant sync pending'; }
     else if (state.calendar !== 'ready') { strip.classList.add('degraded'); label = state.calendar === 'error' ? 'Online · Calendar retry' : 'Online · Calendar syncing'; }
