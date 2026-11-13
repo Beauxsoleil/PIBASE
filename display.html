@@ -231,11 +231,13 @@
     onSnapshot(doc(db,'settings','mission'),snap=>{if(snap.exists()){const data=snap.data();missionSettings={fiscalYear:Number(data.fiscalYear)||currentFiscalYear(),target:Math.max(0,Number(data.target)||0)};}else{missionSettings={fiscalYear:currentFiscalYear(),target:0};}const monthly=snap.exists()?snap.data().monthlyMission:null;window.dispatchEvent(new CustomEvent('pibase:thibodeaux-mission',{detail:{month:monthly&&monthly.month||'',target:Number(monthly&&monthly.target)||0,confirmed:Number(monthly&&monthly.confirmed)||0}}));if(currentScreen===3)renderPipeline();},err=>{console.warn('Mission settings unavailable',err);});
   });
   showScreen(3); // Default to Pipeline / Mission on every kiosk load.
+  window.addEventListener('pibase:remote-screen',e=>{const n=e.detail?.index;if(Number.isInteger(n)&&n>=0&&n<=3){selectedApplicantId=null;detailView.classList.remove('open');showScreen(n);window.dispatchEvent(new CustomEvent('pibase:screen-change',{detail:{id:['boardScreen','todayScreen','calendarScreen','pipelineScreen'][n]}}));}});
   loadCalendarFeed();
   setInterval(loadCalendarFeed,CALENDAR_REFRESH_MS);
 </script>
 <!-- Kiosk companions temporarily disabled; source files preserved. -->
 
+<script type="module" src="./kiosk-control.js"></script>
 <script type="module" src="./pwa-runtime.js"></script>
 </body>
 </html>
