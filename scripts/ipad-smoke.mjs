@@ -56,7 +56,8 @@ test('login, archive filter, stage alias, escaping and read-only requests',()=>{
 });
 test('cards do not render age, area, prior service, or education; territory still counts areas',()=>{
  const b=boot();login(b);complete(b,[applicant('A','Synthetic Alpha',{age:{integerValue:'22'},generalArea:{stringValue:'Twin Falls'},priorService:{stringValue:'Army veteran'},educationLevel:{stringValue:'Some College'}})]);
- assert.match(b.el('inner').innerHTML,/S\\. Alpha/);\n assert.doesNotMatch(b.el('inner').innerHTML,/Synthetic Alpha/);
+ assert.match(b.el('inner').innerHTML,/S\. Alpha/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Synthetic Alpha/);
  assert.doesNotMatch(b.el('inner').innerHTML,/22 yo/);
  assert.doesNotMatch(b.el('inner').innerHTML,/Twin Falls/);
  assert.doesNotMatch(b.el('inner').innerHTML,/Army veteran/);
