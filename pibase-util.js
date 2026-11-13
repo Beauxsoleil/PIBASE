@@ -76,6 +76,26 @@ export function enlistedFileUpdate(previous) {
   };
 }
 
+// Unfiling decision: when an Enlisted-folder applicant is edited to a
+// non-Enlisted stage, clear the folder fields so stage and folder cannot
+// disagree (updateDoc is a partial update, so omitting them would preserve
+// the stale filing). Staying at the Enlisted stage keeps the folder.
+// Cowards / Previous FY folders are deliberate placements and are never
+// cleared by a stage edit. previousStage is cleared too: it records the
+// stage before enlistment, and once unfiled it is stale — a later re-file
+// then records the then-current stage instead. Returns the archive fields
+// to merge into the save payload, or null.
+export function enlistedUnfileUpdate(previous, newStage) {
+  if (newStage === 'Enlisted' || previous?.archiveFolder !== 'enlisted') return null;
+  return {
+    archived: false,
+    archiveFolder: null,
+    archivedAt: null,
+    previousStage: null,
+    archivedFiscalYear: null,
+  };
+}
+
 // Stage an enlisted applicant returns to on restore: their previous stage
 // when it was a real recruiting stage, otherwise Q&E (the stage before
 // enlistment). Never returns 'Enlisted', so a restore cannot re-file.

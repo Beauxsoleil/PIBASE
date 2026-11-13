@@ -64,6 +64,26 @@ assert.strictEqual(util.enlistedFileUpdate({ archiveFolder: 'enlisted', statusSt
 // Legacy Enlisted-stage record with no folder is filed on save.
 assert.strictEqual(util.enlistedFileUpdate({ statusStage: 'Enlisted' }).archiveFolder, 'enlisted');
 
+// Unfiling decision: editing an Enlisted-folder applicant to a non-Enlisted
+// stage clears the folder (a partial updateDoc would otherwise preserve the
+// stale filing); staying Enlisted keeps it; Cowards / Previous FY placements
+// and unfiled records are untouched.
+assert.deepStrictEqual(util.enlistedUnfileUpdate({ archiveFolder: 'enlisted', statusStage: 'Enlisted', archived: true, archivedAt: '2026-11-01', previousStage: 'Q&E', archivedFiscalYear: 2027 }, 'Q&E'), { archived: false, archiveFolder: null, archivedAt: null, previousStage: null, archivedFiscalYear: null });
+assert.strictEqual(util.enlistedUnfileUpdate({ archiveFolder: 'enlisted', statusStage: 'Enlisted' }, 'Enlisted'), null);
+assert.strictEqual(util.enlistedUnfileUpdate({ archiveFolder: 'cowards', statusStage: 'Q&E' }, 'Q&E'), null);
+assert.strictEqual(util.enlistedUnfileUpdate({ archiveFolder: 'previousFY', statusStage: 'Q&E' }, 'Q&E'), null);
+assert.strictEqual(util.enlistedUnfileUpdate({ statusStage: 'Q&E' }, 'Q&E'), null);
+assert.strictEqual(util.enlistedUnfileUpdate(null, 'Q&E'), null);
+
+// Save-path wiring: the phone editor clears the Enlisted folder when the
+// stage moves away from Enlisted, and the kiosk territory screen counts by
+// folder, not by stage alone.
+const indexHtml = await readFile(join(root, 'index.html'), 'utf8');
+assert.ok(indexHtml.includes('enlistedUnfileUpdate(previous,payload.statusStage)'), 'save handler must unfile on a stage change away from Enlisted');
+const eventsUi = await readFile(join(root, 'events-ui.js'), 'utf8');
+assert.ok(eventsUi.includes("if(isEnlisted(a))enlisted++;else active++;"), 'territory aggregate must count by folder, not stage');
+assert.ok(eventsUi.includes("if(isEnlisted(a))return'Enlisted';"), 'territory matrix must group by folder, not stage');
+
 // Restore: returns the previous stage, never re-files into Enlisted.
 assert.strictEqual(util.restoreStageFor({ statusStage: 'Enlisted', previousStage: 'Q&E' }), 'Q&E');
 assert.strictEqual(util.restoreStageFor({ statusStage: 'Enlisted', previousStage: 'Enlisted' }), 'Q&E');
