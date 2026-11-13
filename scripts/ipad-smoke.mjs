@@ -46,7 +46,7 @@ test('typed values preserve unsafe integers and nested types',()=>{
 test('login, archive filter, stage alias, escaping and read-only requests',()=>{
  const b=boot();login(b);complete(b,[applicant('A','<img onerror=alert(1)>',{latestNote:{stringValue:'<script>secret</script>'},waiverType:{stringValue:'Medical waiver'}}),applicant('B','Archived',{archiveFolder:{stringValue:'Previous FY'}})]);
  assert.equal(b.api.getState().applicants.length,1);assert.equal(b.api.getState().applicants[0].statusStage,'Q&E');
- assert.match(b.el('inner').innerHTML,/&lt;img/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/&lt;img/);
  // Privacy: even if a mirror ever carried a note or waiver type, the
  // legacy display must not render either.
  assert.doesNotMatch(b.el('inner').innerHTML,/secret/);
@@ -56,7 +56,7 @@ test('login, archive filter, stage alias, escaping and read-only requests',()=>{
 });
 test('cards do not render age, area, prior service, or education; territory still counts areas',()=>{
  const b=boot();login(b);complete(b,[applicant('A','Synthetic Alpha',{age:{integerValue:'22'},generalArea:{stringValue:'Twin Falls'},priorService:{stringValue:'Army veteran'},educationLevel:{stringValue:'Some College'}})]);
- assert.match(b.el('inner').innerHTML,/Synthetic Alpha/);
+ assert.match(b.el('inner').innerHTML,/S\\. Alpha/);\n assert.doesNotMatch(b.el('inner').innerHTML,/Synthetic Alpha/);
  assert.doesNotMatch(b.el('inner').innerHTML,/22 yo/);
  assert.doesNotMatch(b.el('inner').innerHTML,/Twin Falls/);
  assert.doesNotMatch(b.el('inner').innerHTML,/Army veteran/);
