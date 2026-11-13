@@ -1,6 +1,8 @@
 rules_version = '2';
 // Shared PIBASE + Warrior Challenge policy. Bootstrap PIBASE access documents FIRST.
 // Canonical file: security/muse/firestore.rules. Root mirror must stay identical.
+// Kiosk auth reads ONLY the sanitized kioskApplicants collection, never
+// full applicant documents. See docs/privacy-hardening.md for the design.
 // Never put passwords, tokens, or service-account keys in this repository.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -22,8 +24,15 @@ service cloud.firestore {
     }
     function reader() {
       return owner() || (assistant() && access().get('read', false) == true)
-        || (reviewer() && access().get('read', false) == true)
-        || (enabled() && access().get('role', '') == 'kiosk');
+        || (reviewer() && access().get('read', false) == true);
+    }
+    // Kiosk display role: reads ONLY the sanitized kioskApplicants
+    // collection plus events, results, mission, and the daily reminder.
+    // It cannot read full applicant documents, notes, or survey data.
+    // No provider constraint: the Pi signs in anonymously, the legacy
+    // iPad with a display account's email/password.
+    function kiosk() {
+      return enabled() && access().get('role', '') == 'kiosk';
     }
     function writer() {
       return owner() || (assistant() && access().get('read', false) == true
@@ -61,7 +70,55 @@ service cloud.firestore {
         && (d.get('dependents', null) == null || d.dependents is int)
         && (d.get('phone', null) == null || d.phone is string)
         && (d.get('email', null) == null || d.email is string)
-        && (d.get('statusStage', null) == null || d.statusStage is string);
+        && (d.get('statusStage', null) == null || d.statusStage is string)
+        && (d.get('medicalIssueFlag', null) == null
+          || d.medicalIssueFlag in ['yes', 'no', 'unknown'])
+        && (d.get('legalIssueFlag', null) == null
+          || d.legalIssueFlag in ['yes', 'no', 'unknown']);
+    }
+    // Legacy free-text medical/legal fields are frozen: no new record may
+    // carry them, and no update may introduce or change them. Removal goes
+    // through the approved console retention process, not casual edits.
+    function noNewLegacyFields() {
+      return request.resource.data.get('physicalHealth', null) == null
+        && request.resource.data.get('legalIssues', null) == null;
+    }
+    function legacyFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['physicalHealth', 'legalIssues']);
+    }
+    // Sanitized kiosk copy: the key whitelist is the enforcement — even
+    // the owner cannot put phone, email, flags, waiver data, or notes
+    // into a mirror. Keep in sync with KIOSK_APPLICANT_FIELDS in
+    // pibase-util.js.
+    function validKioskApplicant() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'statusStage', 'age', 'generalArea',
+          'priorService', 'educationLevel', 'nextAction', 'nextActionDate',
+          'precedence', 'updatedAt', 'createdAt', 'archived', 'archiveFolder',
+          'updatedBy'])
+        && nonempty(d.get('name', ''))
+        && d.get('updatedAt', null) is timestamp
+        && (d.get('createdAt', null) == null || d.createdAt is timestamp)
+        && (d.get('age', null) == null || d.age is int)
+        && (d.get('archived', null) == null || d.archived is bool)
+        && (d.get('statusStage', null) == null || d.statusStage is string)
+        && (d.get('generalArea', null) == null || d.generalArea is string)
+        && (d.get('priorService', null) == null || d.priorService is string)
+        && (d.get('educationLevel', null) == null
+          || d.educationLevel is string)
+        && (d.get('nextAction', null) == null || d.nextAction is string)
+        && (d.get('nextActionDate', null) == null
+          || d.nextActionDate is string)
+        && (d.get('precedence', null) == null || d.precedence is string)
+        && (d.get('archiveFolder', null) == null || d.archiveFolder is string)
+        && (d.get('updatedBy', null) == null || d.updatedBy is string);
+    }
+    // Mirror attribution is by updatedBy alone: updatedAt is copied
+    // applicant data (a backfill must preserve it, or every Review badge
+    // would clear), not the mirror's own write time.
+    function mirrorAttributed() {
+      return request.resource.data.get('updatedBy', '') == request.auth.uid;
     }
     function active(d) {
       return d.get('archived', false) != true
@@ -73,12 +130,13 @@ service cloud.firestore {
     }
     match /applicants/{id} {
       allow read: if reader() || syncer();
-      allow create: if writer() && validApplicant()
+      allow create: if writer() && validApplicant() && noNewLegacyFields()
         && (owner() || (attributed() && active(request.resource.data)));
       // Reviewers may create ONLY the deterministic separate-applicant record
       // for a reviewed survey submission: source-stamped, New Lead stage,
       // fully attributed. No other applicant writes.
       allow create: if reviewer() && validApplicant() && attributed()
+        && noNewLegacyFields()
         && active(request.resource.data)
         && id.matches('^survey-[0-9a-fA-F-]{36}-separate$')
         && request.resource.data.get('source', '') == 'SURVEY'
@@ -88,11 +146,12 @@ service cloud.firestore {
       // applicant records: source-stamped, New Lead stage, fully attributed.
       // No updates, no deletes, no other IDs, no other collections.
       allow create: if syncer() && validApplicant() && attributed()
+        && noNewLegacyFields()
         && active(request.resource.data)
         && id.matches('^survey-[0-9a-fA-F-]{36}$')
         && request.resource.data.get('source', '') == 'SURVEY'
         && request.resource.data.get('statusStage', '') == 'New Lead';
-      allow update: if writer() && validApplicant()
+      allow update: if writer() && validApplicant() && legacyFieldsUnchanged()
         && (owner() || (attributed() && active(resource.data)
           && active(request.resource.data)
           && !request.resource.data.diff(resource.data).affectedKeys()
@@ -109,31 +168,94 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+    // Sanitized kiosk data: the only applicant collection kiosk auth may
+    // read. Mirrors are written by the editor on every applicant save and
+    // by "Rebuild kiosk data"; the key whitelist in validKioskApplicant()
+    // is the enforcement. Mirrors are never deleted client-side (an
+    // archived applicant's mirror stays, marked archived, so the kiosk
+    // mission count stays correct).
+    match /kioskApplicants/{id} {
+      allow read: if kiosk() || reader();
+      allow create, update: if (owner() || (writer() && mirrorAttributed()))
+        && validKioskApplicant();
+      // The SURVEY sync worker may mirror the leads it creates (same
+      // deterministic IDs). Create-only, like its applicant writes:
+      // the worker never updates records. Optional until the worker is
+      // updated; until then the editor's drift check flags its leads as
+      // missing and a rebuild mirrors them (see docs/privacy-hardening.md).
+      allow create: if syncer() && mirrorAttributed()
+        && validKioskApplicant()
+        && id.matches('^survey-[0-9a-fA-F-]{36}$');
+      allow create: if reviewer() && mirrorAttributed()
+        && validKioskApplicant()
+        && id.matches('^survey-[0-9a-fA-F-]{36}-separate$');
+      allow delete: if false;
+    }
     match /events/{id} {
-      allow read: if reader();
-      allow create, update: if writer()
+      allow read: if reader() || kiosk();
+      // Event notes live in the reader-only subcollection below, never in
+      // the kiosk-readable parent doc: a create must not carry them, and
+      // an update must not touch them (legacy in-doc values, if any, stay
+      // untouched until the console cleanup — see docs/privacy-hardening.md).
+      allow create: if writer()
         && nonempty(request.resource.data.get('name', ''))
         && (request.resource.data.get('date', null) == null || request.resource.data.date is string)
+        && !('notes' in request.resource.data)
+        && !('resultNotes' in request.resource.data)
+        && (owner() || attributed());
+      allow update: if writer()
+        && nonempty(request.resource.data.get('name', ''))
+        && (request.resource.data.get('date', null) == null || request.resource.data.date is string)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['notes', 'resultNotes'])
         && (owner() || attributed());
       allow delete: if false;
+      // Planning and result notes are reader-only: the kiosk role has no
+      // allow here, so it cannot read this subcollection at all. One doc
+      // per note kind ('planning' / 'results'), {text, updatedAt,
+      // updatedBy}; free-text only, no structured fields.
+      match /notes/{noteId} {
+        allow read: if reader();
+        allow create, update: if writer() && (owner() || attributed())
+          && request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy'])
+          && request.resource.data.get('text', null) is string;
+        allow delete: if false;
+      }
     }
     match /eventResults/{id} {
-      allow read: if reader();
-      allow create, update: if writer()
+      allow read: if reader() || kiosk();
+      // Result notes live in the reader-only subcollection below, never
+      // in the kiosk-readable parent doc (same freeze pattern as events).
+      allow create: if writer()
         && nonempty(request.resource.data.get('summary', ''))
         && request.resource.data.get('start', null) is string
+        && !('resultNotes' in request.resource.data)
+        && (owner() || attributed());
+      allow update: if writer()
+        && nonempty(request.resource.data.get('summary', ''))
+        && request.resource.data.get('start', null) is string
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['resultNotes'])
         && (owner() || attributed());
       allow delete: if false;
+      // One doc ('results'), {text, updatedAt, updatedBy}; reader-only.
+      match /notes/{noteId} {
+        allow read: if reader();
+        allow create, update: if writer() && (owner() || attributed())
+          && request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy'])
+          && request.resource.data.get('text', null) is string;
+        allow delete: if false;
+      }
     }
     match /settings/mission {
-      allow read: if reader();
+      allow read: if reader() || kiosk();
       allow create, update: if owner();
       allow delete: if false;
     }
     // Daily reminder state is readable by enrolled devices; only the phone
     // owner may acknowledge it. Assistants cannot dismiss the owner's warning.
     match /settings/{settingId} {
-      allow read: if settingId.matches('inputAppointments-[0-9]{4}-[0-9]{2}-[0-9]{2}') && reader();
+      allow read: if settingId.matches('inputAppointments-[0-9]{4}-[0-9]{2}-[0-9]{2}') && (reader() || kiosk());
       allow create, update: if settingId.matches('inputAppointments-[0-9]{4}-[0-9]{2}-[0-9]{2}')
         && owner()
         && request.resource.data.keys().hasOnly(['dismissed'])

@@ -20,12 +20,12 @@ function boot(saved, storageFails=false) {
 }
 const key='pibase.ipad.v1.session';
 function login(b){b.el('email').value='test@example.invalid';b.el('password').value='test-password';b.el('login').onsubmit({preventDefault(){}});const req=b.requests.shift();assert.match(req.url,/signInWithPassword/);req.respond(200,{idToken:'fake-id',refreshToken:'fake-refresh',localId:'fake-user',expiresIn:'3600'});assert.equal(b.el('password').value,'');}
-const doc=(id, fields)=>({name:'projects/demo/databases/(default)/documents/applicants/'+id,fields});
+const doc=(id, fields)=>({name:'projects/demo/databases/(default)/documents/kioskApplicants/'+id,fields});
 const applicant=(id,name,extra={})=>doc(id,{name:{stringValue:name},updatedAt:{timestampValue:'2026-10-01T00:00:00Z'},statusStage:{stringValue:'DEP'},...extra});
 function complete(b,apps=[applicant('A','Synthetic Alpha')]){
   const pending=b.requests.splice(0);
   for(const req of pending){
-    if(req.url.includes('/applicants?'))req.respond(200,{documents:apps});
+    if(req.url.includes('/kioskApplicants?'))req.respond(200,{documents:apps});
     else if(/\/(events|eventResults)\?/.test(req.url))req.respond(200,{documents:[]});
     else if(req.url.includes('/settings/'))req.respond(404,{});
     else if(req.url.includes('calendar.ics'))req.respond(200,'BEGIN:VCALENDAR\nEND:VCALENDAR');
@@ -44,10 +44,21 @@ test('typed values preserve unsafe integers and nested types',()=>{
  assert.equal(JSON.stringify(d.a),'[12,false,null]');assert.equal(d.big,'9007199254740993');assert.equal(d.geo.latitude,1);assert.equal(d.timestamp,'2026-01-01T00:00:00.123456Z');
 });
 test('login, archive filter, stage alias, escaping and read-only requests',()=>{
- const b=boot();login(b);complete(b,[applicant('A','<img onerror=alert(1)>',{latestNote:{stringValue:'<script>secret</script>'}}),applicant('B','Archived',{archiveFolder:{stringValue:'Previous FY'}})]);
+ const b=boot();login(b);complete(b,[applicant('A','<img onerror=alert(1)>',{latestNote:{stringValue:'<script>secret</script>'},waiverType:{stringValue:'Medical waiver'}}),applicant('B','Archived',{archiveFolder:{stringValue:'Previous FY'}})]);
  assert.equal(b.api.getState().applicants.length,1);assert.equal(b.api.getState().applicants[0].statusStage,'Q&E');
- assert.match(b.el('inner').innerHTML,/&lt;img/);assert.match(b.el('inner').innerHTML,/&lt;script/);assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
+ assert.match(b.el('inner').innerHTML,/&lt;img/);
+ // Privacy: even if a mirror ever carried a note or waiver type, the
+ // legacy display must not render either.
+ assert.doesNotMatch(b.el('inner').innerHTML,/secret/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Medical waiver/);
+ assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
  b.api.poll();assert.ok(b.requests.every(r=>r.method==='GET' && r.headers.Authorization==='Bearer fake-id'));
+});
+test('kiosk poll reads only the sanitized collection',()=>{
+ const b=boot();login(b);
+ assert.ok(b.requests.some(r=>r.url.includes('/kioskApplicants?')), 'poll must request kioskApplicants');
+ assert.ok(b.requests.every(r=>!r.url.includes('/applicants?')), 'poll must never request full applicants');
+ complete(b);
 });
 test('enlisted applicants count toward the mission but leave the active roster',()=>{
  const b=boot();login(b);complete(b,[
@@ -84,7 +95,7 @@ test('folder/stage mismatch still counts as enlisted on mission and territory',(
  assert.match(b.el('inner').innerHTML,/Unassigned<\/td><td>0<\/td><td>0<\/td><td>1<\/td><td>2<\/td>/);
 });
 test('all pages are collected before replacing visible data',()=>{
- const b=boot();login(b);const first=b.requests.find(r=>r.url.includes('/applicants?'));b.requests.splice(b.requests.indexOf(first),1);
+ const b=boot();login(b);const first=b.requests.find(r=>r.url.includes('/kioskApplicants?'));b.requests.splice(b.requests.indexOf(first),1);
  first.respond(200,{documents:[applicant('A','Page one')],nextPageToken:'cursor &?'});const second=b.requests.pop();assert.match(second.url,/pageToken=cursor%20%26%3F/);
  complete(b);assert.equal(b.api.getState().applicants.length,0);second.respond(200,{documents:[applicant('B','Page two')]});assert.equal(b.api.getState().applicants.length,2);
 });
@@ -109,6 +120,32 @@ test('storage failure remains usable but warns that session is temporary',()=>{
 test('overlapping polls suppressed',()=>{const b=boot();login(b);const n=b.requests.length;b.api.poll();assert.equal(b.requests.length,n)});
 test('calendar UTC parsing and escaped text',()=>{
  const b=boot();const rows=b.api.parseCalendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261102T180000Z\nSUMMARY:School\\, visit\nLOCATION:Room\\nTwo\nEND:VEVENT\nEND:VCALENDAR');assert.equal(rows[0].time,Date.UTC(2026,10,2,18));assert.equal(rows[0].title,'School, visit');assert.equal(rows[0].location,'Room Two');
+});
+test('calendar parser drops sensitive events',()=>{
+ const b=boot();const rows=b.api.parseCalendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261120T150000Z\nSUMMARY:School visit\nLOCATION:Twin Falls High\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261121T150000Z\nSUMMARY:DUI hearing\nLOCATION:Courthouse\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261122T150000Z\nSUMMARY:Check-in\nLOCATION:Probation Office\nEND:VEVENT\nEND:VCALENDAR');
+ assert.equal(rows.length,1);assert.equal(rows[0].title,'School visit');
+});
+test('events slide drops sensitive events and results',()=>{
+ const b=boot();login(b);
+ const pending=b.requests.splice(0);
+ for(const req of pending){
+   if(req.url.includes('/kioskApplicants?'))req.respond(200,{documents:[applicant('A','Synthetic Alpha')]});
+   else if(req.url.includes('/events?'))req.respond(200,{documents:[
+     {name:'projects/demo/databases/(default)/documents/events/e1',fields:{name:{stringValue:'School visit'},date:{stringValue:'2026-11-20'},location:{stringValue:'Twin Falls High'}}},
+     {name:'projects/demo/databases/(default)/documents/events/e2',fields:{name:{stringValue:'DUI hearing'},date:{stringValue:'2026-11-21'},location:{stringValue:'Courthouse'}}}
+   ]});
+   else if(req.url.includes('/eventResults?'))req.respond(200,{documents:[
+     {name:'projects/demo/databases/(default)/documents/eventResults/r1',fields:{summary:{stringValue:'Therapist appointment'},start:{stringValue:'2026-11-19'},location:{stringValue:'Clinic'}}}
+   ]});
+   else if(req.url.includes('/settings/'))req.respond(404,{});
+   else if(req.url.includes('calendar.ics'))req.respond(200,'BEGIN:VCALENDAR\nEND:VCALENDAR');
+   else throw Error('Unexpected request '+req.url);
+ }
+ for(let i=0;i<600 && !/Recruiting Events/.test(b.el('section').textContent);i++)b.api.rotate();
+ assert.match(b.el('section').textContent,/Recruiting Events/);
+ assert.match(b.el('inner').innerHTML,/School visit/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/DUI hearing/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Therapist appointment/);
 });
 test('overflow scrolls before rotating; ordinary slides rotate automatically',()=>{
  const b=boot();login(b);complete(b);b.el('viewport').scrollHeight=700;for(let i=0;i<32;i++)b.api.rotate();assert.ok(b.el('viewport').scrollTop>0);assert.match(b.el('section').textContent,/Applicants/);

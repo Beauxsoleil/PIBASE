@@ -12,7 +12,7 @@ The existing phone and kiosk keep their current behavior until you deploy it.
 | Owner | Applicants, notes, events, results, mission, daily reminders | Existing phone operations; no hard deletes |
 | Assistant with `read: true` | Entire applicant documents, notes, events, results, mission | None until `write: true` |
 | Assistant with both switches | Same reads | Active applicants, new notes, events/results; attribution required |
-| Enrolled kiosk UID | Same reads | None |
+| Enrolled kiosk UID | Sanitized kioskApplicants, events, results, mission, daily reminders | None |
 | Unknown, disabled, or unenrolled anonymous UID | None | None |
 
 Muse cannot archive/restore applicants, edit archived applicants, rewrite existing
@@ -23,7 +23,12 @@ An assistant can edit all other applicant fields, including sensitive fields.
 timestamp. This identifies the latest writer; it is **not** an immutable audit log
 of every applicant or event change.
 
-Reads expose full documents, including health/legal notes and contact details.
+Reads expose full documents, including health/legal notes and contact details —
+except for the kiosk role, which reads only the sanitized `kioskApplicants`
+collection (name, stage, area, next action, and the other display-only fields;
+no phone, email, flags, waiver data, or notes). See
+[the privacy hardening doc](../../docs/privacy-hardening.md) for the full
+design, the mirror field list, and the deployment sequence.
 Do not grant this access unless that data sharing is appropriate for your work.
 If Muse needs only scheduling, use a separate sanitized collection and a
 different policy before connecting. Revocation prevents future server access;

@@ -4,7 +4,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore,
-  enableIndexedDbPersistence,
   collection,
   doc,
   addDoc,
@@ -16,7 +15,8 @@ import {
   query,
   orderBy,
   where,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth,
@@ -28,7 +28,7 @@ import {
 import { initAppointmentReminder } from './appointment-reminder.js';
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
-import { applicantNeedsReview, isArchived, isEnlisted } from './pibase-util.js';
+import { applicantNeedsReview, isArchived, isEnlisted, sanitizeForKiosk, findMirrorDrift, createMirrorSyncQueue } from './pibase-util.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE",
@@ -52,21 +52,18 @@ export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// Offline persistence benefits both surfaces: the phone keeps field edits
-// usable without the MiFi puck, and the kiosk keeps serving cached applicants.
-enableIndexedDbPersistence(db).catch(error => {
-  if (error?.code !== 'failed-precondition' && error?.code !== 'unimplemented') {
-    console.warn('PIBASE Firestore offline persistence unavailable', error);
-  }
-});
+// Firestore defaults to memory-only caching. Persistent IndexedDB storage is
+// intentionally disabled for both the editor and the kiosk to reduce PII at rest.
+// Existing browser IndexedDB data must be cleared separately on deployed devices.
 
 // The TV reads Firestore without a recruiter login, so it signs in with an
-// anonymous credential: security rules then require request.auth != null
-// (protecting applicant PII from unauthenticated reads) instead of
-// `allow read: if true`. Requires the "Anonymous" provider in
-// Firebase console -> Authentication. authReady always resolves (the catch
-// swallows the failure) so kiosk code never hangs; a failed sign-in surfaces
-// as the usual Firestore permission-denied error on the display.
+// anonymous credential enrolled under the `kiosk` role: security rules let
+// that role read only the sanitized `kioskApplicants` collection (plus
+// events, mission, and the daily reminder), never full applicant documents.
+// Requires the "Anonymous" provider in Firebase console -> Authentication.
+// authReady always resolves (the catch swallows the failure) so kiosk code
+// never hangs; a failed sign-in surfaces as the usual Firestore
+// permission-denied error on the display.
 export const authReady = isKiosk
   ? signInAnonymously(auth).catch(error => {
       console.error('PIBASE kiosk anonymous sign-in failed. Enable the Anonymous '
@@ -96,6 +93,122 @@ export { isArchived, isEnlisted };
 // downstream code never has to special-case the alias.
 export function canonicalStage(stage) {
   return stage === 'DEP' ? 'Q&E' : stage;
+}
+
+// ---- Sanitized kiosk data (kioskApplicants) ---------------------------
+// Firestore rules cannot restrict individual fields inside a readable
+// document, so the kiosk never reads `applicants`. Every applicant write
+// in the editor mirrors a sanitized copy (see sanitizeForKiosk) into
+// `kioskApplicants/{same-id}`, and the kiosk + iPad read only that
+// collection. The mirror is a full replace (no merge), so a field removed
+// from the applicant cannot linger in the kiosk copy.
+//
+// Mirror writes are best-effort after the applicant write succeeds: a
+// failed mirror must never fail the save itself. Callers use
+// requestMirrorSync, which records failures in an in-memory queue (see
+// below) and notifies the editor UI; the next save, a manual retry, or
+// "Rebuild kiosk data" repairs it.
+export async function writeKioskMirror(id, applicantData) {
+  if (!id) return;
+  await setDoc(doc(db, 'kioskApplicants', id), sanitizeForKiosk(applicantData));
+}
+
+// ---- Mirror sync queue --------------------------------------------------
+// Failed mirror writes are queued (in memory only — never persisted, so
+// no applicant PII is written to storage) instead of being lost to a
+// console warning. The editor shows a banner with a retry button on the
+// applicant list whenever the queue is non-empty; every change dispatches
+// a 'pibase:mirror-sync' event with {pending, count}.
+const mirrorQueue = createMirrorSyncQueue({
+  write: (id, data) => writeKioskMirror(id, data),
+  onChange: (status) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pibase:mirror-sync', { detail: status }));
+    }
+  }
+});
+
+// Best-effort mirror write for one applicant. Resolves even on failure:
+// the failure is recorded in the queue and the caller (save/archive/
+// restore) is never failed by it. Prefer this over writeKioskMirror.
+export const requestMirrorSync = (id, data) => mirrorQueue.request(id, data);
+
+// Retry every queued mirror with fresh data from resolveData(id).
+// Returns {repaired, failed}.
+export const retryFailedMirrors = (uid, resolveData) => mirrorQueue.retry(resolveData, uid);
+
+// Current queue state: {pending: [ids], count}.
+export const getMirrorSyncStatus = () => mirrorQueue.status();
+
+// Clear queued failures for the given ids (or all of them).
+export const clearMirrorSync = (ids) => mirrorQueue.clear(ids);
+
+// One-time drift check: compare the loaded applicant list against the
+// stored mirrors and report {checked, mirrorCount, missing, stale, extra}.
+// This is the SURVEY reconcile path: leads created by the external
+// sync-leads worker (which does not write mirrors) show up as `missing`
+// the first time the phone editor loads, and the banner tells the user to
+// rebuild. Mirrors with no applicant are reported as `extra`, never
+// auto-deleted — orphan cleanup is a console-only delete.
+export async function checkKioskMirrorDrift(applicants) {
+  const snap = await getDocs(collection(db, 'kioskApplicants'));
+  const mirrors = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return findMirrorDrift(applicants || [], mirrors);
+}
+
+// One-time backfill / drift repair: rewrite every mirror from the
+// in-memory applicant list (no extra reads). Batched at 500 writes per
+// batch; the applicant list is small. Legacy records without updatedAt
+// get a fresh server timestamp so the kiosk's orderBy('updatedAt') query
+// still returns them. Returns { written, failed, failedIds }.
+export async function rebuildKioskMirrors(applicants, uid) {
+  const docs = Array.isArray(applicants) ? applicants : [];
+  let written = 0, failed = 0;
+  const failedIds = [];
+  for (let i = 0; i < docs.length; i += 500) {
+    const batch = writeBatch(db);
+    const chunk = docs.slice(i, i + 500);
+    const batchIds = [];
+    for (const a of chunk) {
+      if (!a?.id) { failed++; continue; }
+      batch.set(doc(db, 'kioskApplicants', a.id), sanitizeForKiosk({
+        ...a,
+        updatedAt: a.updatedAt || serverTimestamp(),
+        updatedBy: uid || a.updatedBy || ''
+      }));
+      batchIds.push(a.id);
+    }
+    if (!batchIds.length) continue;
+    try {
+      await batch.commit();
+      written += batchIds.length;
+      // A successful rebuild supersedes any queued failure for these ids.
+      mirrorQueue.clear(batchIds);
+    } catch (error) {
+      // A batch commit is all-or-nothing, so a single bad document would
+      // otherwise fail all 500 mirrors. Retry each document on its own so
+      // only the genuinely failing records stay broken, and queue them
+      // for retry instead of dropping them silently.
+      console.warn('PIBASE kiosk mirror rebuild batch failed — retrying documents one at a time.', error);
+      for (const id of batchIds) {
+        const a = chunk.find(x => x?.id === id);
+        try {
+          await setDoc(doc(db, 'kioskApplicants', id), sanitizeForKiosk({
+            ...a,
+            updatedAt: a.updatedAt || serverTimestamp(),
+            updatedBy: uid || a.updatedBy || ''
+          }));
+          written++;
+          mirrorQueue.clear([id]);
+        } catch (docError) {
+          failed++;
+          failedIds.push(id);
+          mirrorQueue.markFailed(id, { ...a, updatedBy: uid || a.updatedBy || '' }, docError);
+        }
+      }
+    }
+  }
+  return { written, failed, failedIds };
 }
 
 // Plain snapshot passthrough for non-applicant queries (events, settings, ...).

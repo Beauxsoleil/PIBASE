@@ -169,4 +169,199 @@ const committed = util.parseICS(ics);
 assert.ok(committed.length > 0, 'committed calendar.ics should contain events');
 for (const e of committed) assert.ok(!Number.isNaN(e.start.getTime()), 'event must have a valid start');
 
+// ---- Privacy hardening: sanitized kiosk data --------------------------
+// sanitizeForKiosk keeps exactly the 14 allowlisted fields and drops
+// everything sensitive, even when the source record carries it.
+// archivedFiscalYear was cut from the allowlist in Nov 2026: no kiosk
+// screen reads it (Previous FY grouping is editor-only).
+const fullApplicant = {
+  id: 'a1', name: 'Jane Doe', statusStage: 'Q&E', age: 22,
+  generalArea: 'Twin Falls', priorService: 'None', educationLevel: 'HS',
+  nextAction: 'Call back', nextActionDate: '2026-11-20', precedence: 'high',
+  updatedAt: { seconds: 1700000000 }, createdAt: { seconds: 1690000000 },
+  archived: false, archiveFolder: null, archivedFiscalYear: null,
+  updatedBy: 'uid-owner',
+  phone: '208-555-0100', email: 'jane@example.com',
+  medicalIssueFlag: 'yes', legalIssueFlag: 'no',
+  physicalHealth: 'asthma, inhaler', legalIssues: 'DUI 2024',
+  waiverType: 'Medical', waiverStatus: 'Approved', latestNote: 'called mom',
+  tattoosBrandsPiercings: 'sleeve', maritalStatus: 'Single', dependents: 1,
+  source: 'SURVEY', surveyResponseId: 'resp-1', recruiterSlug: 'joel',
+  school: 'TFHS', previousStage: 'Packet Prep', archivedAt: null,
+  restoredAt: null, flagNeedsReview: true, notes: [{ text: 'secret' }]
+};
+const mirror = util.sanitizeForKiosk(fullApplicant);
+assert.deepStrictEqual(Object.keys(mirror).sort(), [...util.KIOSK_APPLICANT_FIELDS].sort());
+assert.strictEqual(util.KIOSK_APPLICANT_FIELDS.length, 14);
+assert.strictEqual(mirror.name, 'Jane Doe');
+assert.strictEqual(mirror.statusStage, 'Q&E');
+assert.strictEqual(mirror.updatedBy, 'uid-owner');
+assert.strictEqual(mirror.precedence, 'high');
+for (const dropped of ['phone', 'email', 'medicalIssueFlag', 'legalIssueFlag',
+  'physicalHealth', 'legalIssues', 'waiverType', 'waiverStatus', 'latestNote',
+  'tattoosBrandsPiercings', 'maritalStatus', 'dependents', 'source',
+  'surveyResponseId', 'recruiterSlug', 'school', 'previousStage',
+  'archivedAt', 'restoredAt', 'flagNeedsReview', 'notes', 'id',
+  'archivedFiscalYear']) {
+  assert.ok(!(dropped in mirror), `mirror must not carry ${dropped}`);
+}
+// Defaults for missing fields; never mutates the source.
+const emptyMirror = util.sanitizeForKiosk({});
+assert.strictEqual(emptyMirror.name, '');
+assert.strictEqual(emptyMirror.statusStage, null);
+assert.strictEqual(emptyMirror.precedence, 'normal');
+assert.strictEqual(emptyMirror.archived, false);
+assert.strictEqual(emptyMirror.updatedAt, null);
+mirror.name = 'Changed';
+assert.strictEqual(fullApplicant.name, 'Jane Doe');
+
+// Mirror comparison: content equality with timestamp tolerance, and the
+// drift report that powers the SURVEY reconcile path (a lead created by
+// the external sync worker has no mirror, so it shows up as `missing`).
+const t1 = { seconds: 1700000000 };
+const t2 = { seconds: 1700000060 }; // 60s later — same save, separate sentinels
+const tOld = { seconds: 1690000000 };
+const appA = { id: 'a1', name: 'Jane Doe', statusStage: 'Q&E', age: 22, generalArea: 'Twin Falls', updatedAt: t1, createdAt: tOld, archived: false, archiveFolder: null };
+const appB = { id: 'b2', name: 'John Smith', statusStage: 'New Lead', updatedAt: t1, createdAt: t1 };
+assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, updatedAt: t2 }, appA), true, 'sentinel skew within tolerance must match');
+assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, updatedAt: tOld }, appA), false, 'stale timestamp must not match');
+assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, name: 'Janet Doe' }, appA), false, 'changed name must not match');
+assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, archivedFiscalYear: 2026 }, appA), true, 'extra key on an old mirror must not count as drift');
+assert.strictEqual(util.mirrorMatchesApplicant(null, appA), false);
+assert.strictEqual(util.mirrorMatchesApplicant(appA, null), false);
+const drift = util.findMirrorDrift([appA, appB], [{ ...appA, updatedAt: t2 }, { id: 'orphan', name: 'Ghost' }]);
+assert.deepStrictEqual(drift, { checked: 2, mirrorCount: 2, missing: ['b2'], stale: [], extra: ['orphan'] });
+const driftStale = util.findMirrorDrift([appA], [{ ...appA, name: 'Janet Doe' }]);
+assert.deepStrictEqual(driftStale.stale, ['a1']);
+assert.deepStrictEqual(util.findMirrorDrift([], []), { checked: 0, mirrorCount: 0, missing: [], stale: [], extra: [] });
+
+// Mirror sync queue: failures are recorded and retried, never silent.
+{
+  const seen = [];
+  const realWarn = console.warn;
+  console.warn = () => {}; // the queue's diagnostic warn is expected here
+  try {
+    const queue = util.createMirrorSyncQueue({
+      write: async (id, data) => { seen.push(id); if (data.fail) throw Object.assign(new Error('boom'), { code: 'unavailable' }); },
+      onChange: () => {}
+    });
+    await queue.request('ok1', { name: 'Ok' });
+    assert.deepStrictEqual(queue.status(), { pending: [], count: 0 });
+    await queue.request('bad1', { name: 'Bad', fail: true });
+    assert.deepStrictEqual(queue.status(), { pending: ['bad1'], count: 1 });
+    // Retry with fresh data repairs it.
+    const repaired = await queue.retry((id) => (id === 'bad1' ? { name: 'Bad', fail: false } : null), 'uid-1');
+    assert.deepStrictEqual(repaired, { repaired: 1, failed: 0 });
+    assert.deepStrictEqual(queue.status(), { pending: [], count: 0 });
+    // Retry without fresh data retries the failed snapshot and stays queued.
+    await queue.request('bad2', { name: 'Bad2', fail: true });
+    const still = await queue.retry(null, 'uid-1');
+    assert.deepStrictEqual(still, { repaired: 0, failed: 1 });
+    assert.deepStrictEqual(queue.status(), { pending: ['bad2'], count: 1 });
+    // markFailed (rebuild fallback) + clear.
+    queue.markFailed('bad3', { name: 'Bad3' }, Object.assign(new Error('x'), { code: 'permission-denied' }));
+    assert.strictEqual(queue.status().count, 2);
+    queue.clear(['bad2']);
+    assert.deepStrictEqual(queue.status(), { pending: ['bad3'], count: 1 });
+    queue.clear();
+    assert.deepStrictEqual(queue.status(), { pending: [], count: 0 });
+    assert.ok(seen.includes('ok1') && seen.includes('bad1'));
+  } finally {
+    console.warn = realWarn;
+  }
+}
+
+// Tri-state issue flags: only yes / no / unknown, or null for legacy.
+for (const v of [null, undefined, 'yes', 'no', 'unknown']) assert.strictEqual(util.isValidIssueFlag(v), true);
+for (const v of ['', 'maybe', 'Yes', true, 0]) assert.strictEqual(util.isValidIssueFlag(v), false);
+
+// Legacy free-text detection: presence only, never the content.
+assert.strictEqual(util.hasLegacySensitiveFields({ physicalHealth: 'asthma' }), true);
+assert.strictEqual(util.hasLegacySensitiveFields({ legalIssues: 'DUI' }), true);
+assert.strictEqual(util.hasLegacySensitiveFields({ physicalHealth: '   ' }), false);
+assert.strictEqual(util.hasLegacySensitiveFields({ physicalHealth: null }), false);
+assert.strictEqual(util.hasLegacySensitiveFields({ medicalIssueFlag: 'yes' }), false);
+assert.strictEqual(util.hasLegacySensitiveFields({}), false);
+assert.strictEqual(util.hasLegacySensitiveFields(null), false);
+
+// Notes keyword screen: a speed bump, not a guarantee.
+for (const text of ['He was diagnosed with asthma', 'takes medication daily',
+  'arrested last year', 'DUI in 2024', 'failed drug test', 'on probation',
+  'seeing a therapist', 'PTSD screening', 'prescribed insulin']) {
+  assert.strictEqual(util.containsSensitiveNotePattern(text), true, `should flag: ${text}`);
+}
+for (const text of ['Called to schedule MEPS', 'Great attitude, wants 11B',
+  'Follow up next Tuesday', 'lives in Twin Falls', '', 'No issues, all good']) {
+  assert.strictEqual(util.containsSensitiveNotePattern(text), false, `should not flag: ${text}`);
+}
+
+// Static checks: kiosk screens must not render applicant PII, and the
+// kiosk must read the sanitized collection, not full applicants.
+const displayHtml = await readFile(join(root, 'display.html'), 'utf8');
+for (const leak of ['a.phone', 'a.email', 'waiverType', 'latestNote', 'resultNotes',
+  'physicalHealth', 'legalIssues', 'medicalIssueFlag', 'legalIssueFlag']) {
+  assert.ok(!displayHtml.includes(leak), `display.html must not reference ${leak}`);
+}
+assert.ok(displayHtml.includes("collection(db,'kioskApplicants')"), 'display.html must read kioskApplicants');
+assert.ok(!displayHtml.includes("collection(db,'applicants')"), 'display.html must not read applicants');
+assert.ok(displayHtml.includes('containsSensitiveNotePattern'), 'display.html must filter sensitive calendar events');
+const ipadHtml = await readFile(join(root, 'ipad.html'), 'utf8');
+for (const leak of ['waiverType', 'latestNote', 'resultNotes', 'physicalHealth', 'legalIssues']) {
+  assert.ok(!ipadHtml.includes(leak), `ipad.html must not reference ${leak}`);
+}
+assert.ok(ipadHtml.includes("readCollection,'kioskApplicants'"), 'ipad.html must poll kioskApplicants');
+assert.ok(!ipadHtml.includes("readCollection,'applicants'"), 'ipad.html must not poll applicants');
+assert.ok(ipadHtml.includes('sensitiveEvent'), 'ipad.html must filter sensitive events');
+assert.ok(ipadHtml.includes('SENSITIVE_WORDS'), 'ipad.html must carry the sensitive-word list');
+assert.ok(!eventsUi.includes('resultNotes'), 'events-ui.js must not render resultNotes');
+assert.ok(eventsUi.includes('window.__PIBASE_APPLICANTS__'), 'territory must read applicant globals');
+assert.ok(eventsUi.includes('containsSensitiveNotePattern'), 'events-ui.js must filter sensitive events');
+const fbConfig = await readFile(join(root, 'firebase-config.js'), 'utf8');
+assert.ok(!fbConfig.includes('enableIndexedDbPersistence'), 'Firestore persistence must stay disabled');
+assert.ok(fbConfig.includes('writeKioskMirror'), 'firebase-config.js must expose writeKioskMirror');
+assert.ok(fbConfig.includes('rebuildKioskMirrors'), 'firebase-config.js must expose rebuildKioskMirrors');
+assert.ok(fbConfig.includes('requestMirrorSync'), 'firebase-config.js must expose requestMirrorSync');
+assert.ok(fbConfig.includes('checkKioskMirrorDrift'), 'firebase-config.js must expose checkKioskMirrorDrift');
+assert.ok(fbConfig.includes('createMirrorSyncQueue'), 'firebase-config.js must wire the mirror sync queue');
+assert.ok(fbConfig.includes('pibase:mirror-sync'), 'firebase-config.js must dispatch mirror-sync events');
+const eventsHtml = await readFile(join(root, 'events.html'), 'utf8');
+assert.ok(eventsHtml.includes('savePrivateNote'), 'events.html must save notes to the private subcollection');
+assert.ok(eventsHtml.includes('loadPrivateNote'), 'events.html must load notes from the private subcollection');
+assert.ok(eventsHtml.includes("'notes',noteId"), 'events.html must address the notes subcollection');
+assert.ok(!eventsHtml.includes("notes:el('eventNotes').value.trim()"), 'events.html must not write notes into the parent event doc');
+assert.ok(!eventsHtml.includes('...numbers,resultNotes'), 'events.html must not write resultNotes into the parent doc');
+const syncWorkflow = await readFile(join(root, '.github/workflows/sync-calendar.yml'), 'utf8');
+assert.ok(syncWorkflow.includes('SENSITIVE_RE'), 'sync-calendar.yml must redact sensitive summaries');
+assert.ok(syncWorkflow.includes("'Private event'"), 'sync-calendar.yml must replace sensitive summaries');
+const pwaRuntime = await readFile(join(root, 'pwa-runtime.js'), 'utf8');
+assert.ok(pwaRuntime.includes('records stay available until you close the app'), 'offline message must describe memory-only cache');
+assert.ok(!pwaRuntime.includes('cached data remains available'), 'stale offline message must be gone');
+const kioskRuntime = await readFile(join(root, 'kiosk-runtime.js'), 'utf8');
+assert.ok(!kioskRuntime.includes('Cached data'), 'kiosk offline label must not promise disk-cached data');
+assert.ok(kioskRuntime.includes('No data until reconnected'), 'kiosk must say plainly when offline with no data');
+for (const marker of ['requestMirrorSync', 'retryFailedMirrors', 'checkKioskMirrorDrift',
+  'mirrorSyncStatus', 'retryMirrorBtn', 'rebuildKioskMirrors', 'legacySensitiveNotice',
+  'containsSensitiveNotePattern', 'updatedBy:auth.currentUser']) {
+  assert.ok(indexHtml.includes(marker), `index.html must include ${marker}`);
+}
+assert.ok(!indexHtml.includes('writeKioskMirror('), 'index.html must route mirror writes through the sync queue');
+assert.ok(!indexHtml.includes('PIBASE kiosk mirror update failed — rebuild kiosk data'),
+  'index.html must not use the old silent mirror-failure warning');
+assert.ok(!indexHtml.includes('physicalHealth') && !indexHtml.includes('legalIssues'),
+  'index.html must not read or write legacy free-text fields');
+
+// Rules: both copies stay synchronized, and the kiosk collection exists.
+const rootRules = await readFile(join(root, 'firestore.rules'), 'utf8');
+const museRules = await readFile(join(root, 'security/muse/firestore.rules'), 'utf8');
+assert.strictEqual(rootRules, museRules, 'firestore.rules copies must stay identical');
+for (const marker of ['kioskApplicants', 'validKioskApplicant', 'mirrorAttributed',
+  'noNewLegacyFields', 'legacyFieldsUnchanged', "function kiosk()",
+  'match /notes/{noteId}']) {
+  assert.ok(museRules.includes(marker), `firestore.rules must include ${marker}`);
+}
+// The mirror whitelist must not include archivedFiscalYear (still allowed
+// on applicants — the freeze list there is separate and must stay).
+const mirrorFn = museRules.slice(museRules.indexOf('function validKioskApplicant()'), museRules.indexOf('function mirrorAttributed()'));
+assert.ok(!mirrorFn.includes('archivedFiscalYear'), 'validKioskApplicant must not allow archivedFiscalYear');
+
 console.log(`smoke OK (${committed.length} committed events)`);

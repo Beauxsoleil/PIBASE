@@ -31,6 +31,13 @@ access can access localStorage: this is not encrypted isolation. Uncheck Remembe
 for a session that ends on reload. Sign out clears this file's token and display,
 without changing any existing SDK/Pi session. No tokens in URLs or diagnostics.
 
+The token carries whatever role the signed-in account has. The page itself
+polls only the sanitized `kioskApplicants` collection, but a refresh token
+for a recruiter account could still read full applicant documents through
+the REST API if it were copied. Prefer a dedicated display account enrolled
+with role `kiosk` for the iPad, so a stolen token only ever yields
+sanitized data. See [the privacy hardening doc](privacy-hardening.md).
+
 Add to Home Screen BEFORE signing in; Safari and the standalone context may have
 separate storage. Cleared/blocked storage can require signing in again. MFA is not
 implemented. If this account requires MFA or App Check enforcement blocks REST,
@@ -44,15 +51,19 @@ Source inspected: display.html, firebase-config.js, pibase-util.js, events-ui.js
 appointment-reminder.js and firestore.rules on main at 42e0028.
 Project: pi-base-a3a09, database: (default).
 
-- `applicants`: same active/archive semantics and descending updatedAt order as
-  the Pi (records lacking updatedAt are excluded to match its orderBy query).
-  Names, age, generalArea, priorService, educationLevel, statusStage, waiverType,
-  latestNote, updatedAt/createdAt, nextAction/nextActionDate and precedence are
-  available from the same source. Seven stage markers; DEP aliases Q&E; Review
-  means 30 full days since updatedAt, falling back to createdAt.
+- `kioskApplicants`: the sanitized kiosk copy of each applicant (see
+  [privacy hardening](privacy-hardening.md)). Same active/archive semantics
+  and descending updatedAt order as the Pi (records lacking updatedAt are
+  excluded to match its orderBy query). Names, age, generalArea,
+  priorService, educationLevel, statusStage, updatedAt/createdAt,
+  nextAction/nextActionDate and precedence are available. Seven stage
+  markers; DEP aliases Q&E; Review means 30 full days since updatedAt,
+  falling back to createdAt. Phone, email, medical/legal flags, waiver
+  type, and notes are never in this collection and never render.
 - `settings/mission`: fiscalYear and target; stage counts/mission totals.
-- `events`: name/date/location/poc/type, leads/appointments/qualified/contracts,
-  resultNotes; `eventResults`: summary/start and matching result fields.
+- `events`: name/date/location/poc/type, leads/appointments/qualified/contracts;
+  `eventResults`: summary/start and matching result fields. Result notes are
+  stored but never rendered on this display.
 - `settings/inputAppointments-YYYY-MM-DD`: dismissed. Reminder uses Mountain time
   with explicit US DST rules since 2007, no Intl dependency. It is a nonblocking
   banner; dismiss only through the existing phone app. Future timezone-law changes
@@ -71,13 +82,13 @@ its own failure indicator. Empty input is distinct from a failed read.
 Applicant cards use two float columns (four per page). Every section rotates with
 no taps: applicants, Today/follow-ups, next-seven-day calendar, pipeline/mission,
 events/results, territory. Short pages dwell 12 seconds; overflowing content
-scrolls fully before advancing. Latest notes are escaped and shown in full.
-Long notes can make a rotation take longer. No interactive applicant detail/contact
-screen or editing is included. Calendar uses an agenda instead of seven columns;
-events use date-descending pages rather than separate upcoming/recent panels;
-territory uses a counts table. Pi auxiliary high/review/waiver/Q&E tiles, event
-aggregate tiles and mission pace tile are omitted. Stage counts, mission totals,
-applicant fields, event per-record results and area stage mix remain available.
+scrolls fully before advancing. Notes and waiver types are never shown. No
+interactive applicant detail/contact screen or editing is included. Calendar uses
+an agenda instead of seven columns; events use date-descending pages rather than
+separate upcoming/recent panels; territory uses a counts table. Pi auxiliary
+high/review/waiver/Q&E tiles, event aggregate tiles and mission pace tile are
+omitted. Stage counts, mission totals, applicant fields, event per-record results
+and area stage mix remain available.
 
 There is no service worker on iOS 9. During an outage, keep the already-loaded page
 open: last-good data remains only in memory. A cold offline launch, forced reload,
@@ -101,16 +112,20 @@ can affect the existing Pi and phone. No billing or quota settings were changed.
 Recommend a slower agreed interval before unattended all-day operation; 15 seconds
 is retained here to honor the requested contract, not endorsed as quota-safe.
 
-## Test evidence (2026-11-02)
+## Test evidence (2026-11-02, updated 2026-11-12)
 
-- `node scripts/ipad-smoke.mjs`: 17 synthetic tests passed: typed data, pagination,
+- `node scripts/ipad-smoke.mjs`: 19 synthetic tests passed: typed data, pagination,
   error retention, archive/stage semantics, escaping, authentication/refresh,
-  storage refusal, sign-out races, timeout/locks, scrolling, DST and daily reload.
+  storage refusal, sign-out races, timeout/locks, scrolling, DST and daily reload,
+  plus sanitized-collection polling (kioskApplicants only, never applicants) and
+  no note/waiver rendering.
 - Acorn parse with `ecmaVersion: 5`: passed for the entire inline script.
 - `node scripts/ipad-browser-smoke.mjs` with Playwright and Chromium available:
-  passed at 1024x768 with external requests mocked. Verified rendering, page tokens,
-  full-note overflow scroll, 503 retention, session restore after reload and sign-out.
-  Test supports PIBASE_PLAYWRIGHT_MODULE and CHROMIUM_EXECUTABLE_PATH overrides.
+  passed at 1024x768 with external requests mocked (2026-11-02). The fixture
+  was updated 2026-11-12 for the sanitized collection and no note/waiver
+  rendering, but has not been re-run with a browser since; re-run it with
+  Playwright before relying on it. Test supports PIBASE_PLAYWRIGHT_MODULE
+  and CHROMIUM_EXECUTABLE_PATH overrides.
 - Existing `node scripts/smoke.mjs`, `node scripts/pwa-smoke.mjs`,
   `node scripts/appointment-reminder-smoke.mjs`: all passed unchanged.
 - No physical iPad, live login, TLS test, overnight soak or quota measurement done.
@@ -120,11 +135,12 @@ is retained here to honor the requested contract, not endorsed as quota-safe.
 
 - [ ] Open the HTTPS URL in Safari while online. Confirm date/time and Boise zone.
 - [ ] Share > Add to Home Screen; use that icon, landscape orientation, then sign in.
-- [ ] Verify names, stages, latest notes, archive exclusions and totals against Pi.
+- [ ] Verify names, stages, archive exclusions and totals against Pi. Confirm no
+      phone numbers, emails, waiver types, or notes appear anywhere.
 - [ ] Check Settings > General > Auto-Lock > Never (iOS 9 menu), connect power.
 - [ ] Settings > General > Accessibility > Guided Access: enable and set passcode.
       Open display, triple-click Home to start Guided Access. Test exit procedure.
-- [ ] Let it rotate through all sections and scroll a long synthetic test note.
+- [ ] Let it rotate through all sections and scroll a long roster page.
 - [ ] Turn Wi-Fi off: last data remains and timestamp stops; offline retry appears.
 - [ ] Reconnect: updates resume. Close/reopen while online: session restores.
 - [ ] Sign out: cards and this page's remembered credential disappear.
