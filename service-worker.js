@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pibase-app-v41';
+const CACHE_NAME = 'pibase-app-v42';
 const scopeUrl = path => new URL(path, self.registration.scope).href;
 
 const APP_SHELL = [
@@ -15,6 +15,7 @@ const APP_SHELL = [
   'events-ui.js',
   'appointment-reminder.js',
   'kiosk-runtime.js',
+  'kiosk-control.js',
   'assets/boudreaux-sprites.webp',
   'assets/thibideaux-sprites.webp',
   'assets/stripes-for-skills-template.pdf',

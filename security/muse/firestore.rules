@@ -247,6 +247,18 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+    // Kiosk remote: only the owner can write; kiosk reads screen number only.
+    match /settings/kioskControl {
+      allow read: if owner() || kiosk();
+      allow create, update: if owner()
+        && request.resource.data.keys().hasOnly(['screen','updatedAt','updatedBy'])
+        && request.resource.data.screen is int
+        && request.resource.data.screen >= 0
+        && request.resource.data.screen <= 6
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
     match /settings/mission {
       allow read: if reader() || kiosk();
       allow create, update: if owner();

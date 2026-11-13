@@ -91,6 +91,7 @@ export function initEventsUi({ db, collection, onSnapshot, query, orderBy }) {
       else if(e.key==='ArrowUp'&&boardScreen.classList.contains('active')){e.preventDefault();e.stopPropagation();showExtra(territory,'Territory Analytics','board');}
       else if(e.key==='ArrowUp'||e.key==='ArrowDown'){requestAnimationFrame(()=>{announce(document.querySelector('.screen.active')?.id||'',title.textContent);});}
     },true);
+    window.addEventListener('pibase:remote-screen',e=>{const n=e.detail?.index;if(n===4)showExtra(events,'Recruiting Events');else if(n===5)showExtra(territory,'Territory Analytics');else if(Number.isInteger(n)&&n>=0&&n<=3){events.classList.remove('active');territory.classList.remove('active');activeExtra=null;}});
     window.addEventListener('resize',()=>{if(events.classList.contains('active'))renderEvents();else if(territory.classList.contains('active'))renderTerritory();});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
