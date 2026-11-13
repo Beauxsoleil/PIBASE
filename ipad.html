@@ -285,7 +285,7 @@
     summary = '<div class="big">'+enlisted+' / '+(target || '—')+'</div><p>'+remaining+' remaining · '+(target ? Math.round(enlisted/target*100)+'%' : 'Target not set')+' · '+activeCount+' active</p>';
     summary += STAGES.map(function (s) { return '<div class="row">'+esc(s)+' <strong class="right">'+counts[s]+'</strong><div class="bar"><div class="fill" style="width:'+(counted.length ? counts[s]/counted.length*100 : 0)+'%"></div></div></div>'; }).join('');
     next.push({title:'Pipeline / Mission',html:panel('FY'+String(fy).slice(-2)+' Recruiting Mission',summary)});
-    events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts}; }));
+    events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts}; })).filter(function (e) { return !sensitiveEvent(e); });
     events.sort(function (x,y) { return dayDate(y.date)-dayDate(x.date); });
     addPages(next,'Recruiting Events / Results',events,4,function (e) { return panel(e.name || 'Unnamed event',esc([e.date,e.type,e.location,e.poc].filter(Boolean).join(' · '))+'<p>'+esc(Number(e.leads)||0)+' leads · '+esc(Number(e.appointments)||0)+' appts · '+esc(Number(e.qualified)||0)+' qualified · '+esc(Number(e.contracts)||0)+' contracts</p>'); });
     summary = '<table><thead><tr><th>Area</th><th>Early</th><th>Processing</th><th>Q&amp;E</th><th>Enlisted</th></tr></thead><tbody>';
@@ -315,6 +315,16 @@
     } else if (dwell < 120) return;
     slide = (slide+1)%slides.length; dwell = 0; scrollHold = 0; $('inner').removeAttribute('data-content'); render();
   }
+  // Kiosk privacy: drop any calendar/event entry whose title, name, or
+  // location contains a medical/legal keyword. The iPad page is standalone
+  // by design (no module imports), so this is a compact ES5 copy of the
+  // shared containsSensitiveNotePattern stems in pibase-util.js — keep the
+  // two word lists in sync. The calendar feed is redacted upstream
+  // (sync-calendar.yml); this is the render-side defense in depth.
+  var SENSITIVE_WORDS = ['diagnos','medication','prescri','dosage','surgery','therapist','psychiatr','psycholog','adhd','asthma','diabetes','seizure','depression','anxiety','ptsd','bipolar','insulin','inhaler','arrest','convict','felony','misdemeanor','probation','parole','jail','prison','dui','dwi','lawsuit','warrant','theft','assault','burglary','robbery','drug','marijuana','cocaine'];
+  var SENSITIVE_PATTERN = new RegExp('\\b(' + SENSITIVE_WORDS.join('|') + ')\\w*\\b','i');
+  function sensitiveText(v) { return SENSITIVE_PATTERN.test(String(v || '')); }
+  function sensitiveEvent(e) { return sensitiveText((e.name || e.title || '') + ' ' + (e.location || '')); }
   function icsDate(v) {
     var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(v || '');
     if (!m) return null;
@@ -328,7 +338,7 @@
       function unescape(v) { return (v || '').replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\'); }
       d = icsDate(values.DTSTART);
       return d ? {time:d.getTime(),title:unescape(values.SUMMARY)||'Untitled event',location:unescape(values.LOCATION),when:d.toLocaleString()} : null;
-    }).filter(Boolean).sort(function (a,b) { return a.time-b.time; });
+    }).filter(function (e) { return e && !sensitiveEvent(e); }).sort(function (a,b) { return a.time-b.time; });
   }
   function loadCalendar() {
     if (!session || calendarBusy) return;

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert';
 import { before, after, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
@@ -133,6 +134,20 @@ test('Muse can save events/results but cannot change mission or grant access', a
   await assertFails(setDoc(doc(client, 'settings/mission'), { target: 999 }));
   await assertFails(setDoc(doc(client, 'access/muse'), { role: 'owner', enabled: true }));
   await assertFails(getDoc(doc(client, 'access/muse')));
+});
+test('account administration is console-only: /access is deny-all for every client role', async () => {
+  for (const uid of ['owner', 'muse', 'readonly', 'sync', 'reviewer1', 'kiosk', 'unknown']) {
+    const client = db(uid);
+    await assertFails(getDoc(doc(client, 'access/owner')));
+    await assertFails(getDoc(doc(client, `access/${uid}`)));
+    await assertFails(getDocs(collection(client, 'access')));
+    await assertFails(setDoc(doc(client, 'access/new-user'), { role: 'assistant', enabled: true }));
+    await assertFails(updateDoc(doc(client, 'access/muse'), { enabled: false }));
+    await assertFails(deleteDoc(doc(client, 'access/muse')));
+  }
+  const anon = env.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(anon, 'access/owner')));
+  await assertFails(getDocs(collection(anon, 'access')));
 });
 test('read-only assistant cannot write, and revocation affects an existing context', async () => {
   await assertSucceeds(getDoc(doc(db('readonly'), 'applicants/a')));
@@ -418,7 +433,7 @@ function mirrorDoc(uid, overrides = {}) {
     generalArea: 'Twin Falls', priorService: '', educationLevel: '',
     nextAction: '', nextActionDate: '', precedence: 'normal',
     updatedAt: serverTimestamp(), createdAt: serverTimestamp(),
-    archived: false, archiveFolder: null, archivedFiscalYear: null,
+    archived: false, archiveFolder: null,
     updatedBy: uid, ...overrides,
   };
 }
@@ -432,6 +447,11 @@ test('kiosk reads events, results, mission and reminder but not notes or survey 
   await assertFails(getDoc(doc(client, 'applicants/a/notes/old')));
   await assertFails(getDocs(collection(client, 'surveyLeadDedupes')));
   await assertFails(getDoc(doc(client, 'surveyLeadImports/123e4567-e89b-42d3-a456-426614174000')));
+  await assertFails(getDocs(collection(client, 'surveyLeadImports')));
+  // Event notes live in a reader-only subcollection the kiosk cannot see.
+  await assertFails(getDoc(doc(client, 'events/e1/notes/planning')));
+  await assertFails(getDocs(collection(client, 'events/e1/notes')));
+  await assertFails(getDoc(doc(client, 'eventResults/r1/notes/results')));
 });
 
 test('kiosk mirrors accept only sanitized fields from attributed writers', async () => {
@@ -448,7 +468,8 @@ test('kiosk mirrors accept only sanitized fields from attributed writers', async
     {medicalIssueFlag: 'yes'}, {legalIssueFlag: 'no'}, {waiverType: 'Medical'},
     {waiverStatus: 'Approved'}, {latestNote: 'secret'}, {physicalHealth: 'asthma'},
     {legalIssues: 'DUI'}, {source: 'SURVEY'}, {tattoosBrandsPiercings: 'x'},
-    {maritalStatus: 'Single'}, {dependents: 1}, {school: 'TFHS'}]) {
+    {maritalStatus: 'Single'}, {dependents: 1}, {school: 'TFHS'},
+    {archivedFiscalYear: 2026}]) {
     await assertFails(setDoc(doc(db('owner'), 'kioskApplicants/leak'), mirrorDoc('owner', extra)));
   }
   // Shape validation: name required, updatedAt a timestamp, age an int.
@@ -498,7 +519,59 @@ test('tri-state flags validate and legacy free-text fields are frozen', async ()
   await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'applicants/legacy-doc'), {name: 'Synthetic Legacy Doc', physicalHealth: 'old note', legalIssues: 'old note'}));
   await assertSucceeds(updateDoc(doc(owner, 'applicants/legacy-doc'), {name: 'Still Synthetic'}));
   await assertSucceeds(updateDoc(doc(muse, 'applicants/legacy-doc'), {...audit(), nextAction: 'Call'}));
+  // The frozen values survive those edits: read them back.
+  const after = await assertSucceeds(getDoc(doc(owner, 'applicants/legacy-doc')));
+  assert.strictEqual(after.data().physicalHealth, 'old note');
+  assert.strictEqual(after.data().legalIssues, 'old note');
   // Even clearing a frozen field is a change: removal is console-only.
   await assertFails(updateDoc(doc(owner, 'applicants/legacy-doc'), {physicalHealth: 'changed'}));
   await assertFails(updateDoc(doc(owner, 'applicants/legacy-doc'), {physicalHealth: null}));
+  await assertFails(updateDoc(doc(muse, 'applicants/legacy-doc'), {...audit(), physicalHealth: null}));
+  await assertFails(updateDoc(doc(muse, 'applicants/legacy-doc'), {...audit(), legalIssues: null}));
+});
+
+test('event and result notes live in reader-only subcollections, never in kiosk-readable docs', async () => {
+  const owner = db('owner');
+  const muse = db('muse');
+  const kiosk = db('kiosk', 'anonymous');
+  // Seed legacy events that still carry in-doc notes (pre-change data).
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db0 = ctx.firestore();
+    await setDoc(doc(db0, 'events/e1'), { name: 'Synthetic Event', date: '2026-11-20', notes: 'old planning note', resultNotes: 'old result note' });
+    await setDoc(doc(db0, 'eventResults/r1'), { summary: 'Synthetic Result', start: '2026-11-19', resultNotes: 'old result note' });
+  });
+  // New parent docs cannot carry notes/resultNotes.
+  await assertFails(setDoc(doc(muse, 'events/new2'), { name: 'Synthetic Event', date: '2026-11-20', notes: 'x', ...audit() }));
+  await assertFails(setDoc(doc(muse, 'events/new3'), { name: 'Synthetic Event', date: '2026-11-20', resultNotes: 'x', ...audit() }));
+  await assertFails(setDoc(doc(muse, 'eventResults/new2'), { summary: 'Synthetic Result', start: '2026-11-19', resultNotes: 'x', ...audit() }));
+  // Updates must not touch the legacy in-doc notes — but editing other
+  // fields on a legacy event still works, and the notes survive.
+  await assertFails(updateDoc(doc(muse, 'events/e1'), { ...audit(), notes: 'changed' }));
+  await assertFails(updateDoc(doc(owner, 'events/e1'), { resultNotes: null }));
+  await assertFails(updateDoc(doc(muse, 'eventResults/r1'), { ...audit(), resultNotes: 'changed' }));
+  await assertSucceeds(updateDoc(doc(muse, 'events/e1'), { ...audit(), name: 'Renamed Synthetic Event' }));
+  const after = await assertSucceeds(getDoc(doc(owner, 'events/e1')));
+  assert.strictEqual(after.data().notes, 'old planning note');
+  assert.strictEqual(after.data().resultNotes, 'old result note');
+  // The private subcollection: readers read, writers write attributed,
+  // the kiosk cannot read or write it at all.
+  const note = { text: 'Synthetic planning note', updatedAt: serverTimestamp(), updatedBy: 'muse' };
+  await assertSucceeds(setDoc(doc(muse, 'events/e1/notes/planning'), note));
+  await assertSucceeds(setDoc(doc(muse, 'events/e1/notes/results'), { ...note, text: 'Synthetic result note' }));
+  await assertSucceeds(setDoc(doc(muse, 'eventResults/r1/notes/results'), { ...note, text: 'Synthetic result note' }));
+  await assertSucceeds(getDoc(doc(db('readonly'), 'events/e1/notes/planning')));
+  await assertSucceeds(getDoc(doc(owner, 'events/e1/notes/planning')));
+  await assertFails(getDoc(doc(kiosk, 'events/e1/notes/planning')));
+  await assertFails(getDocs(collection(kiosk, 'events/e1/notes')));
+  await assertFails(getDoc(doc(kiosk, 'eventResults/r1/notes/results')));
+  await assertFails(setDoc(doc(kiosk, 'events/e1/notes/planning'), note));
+  // Unattributed writes fail; the owner writes without attribution.
+  await assertFails(setDoc(doc(muse, 'events/e1/notes/other'), { text: 'x', updatedAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(doc(owner, 'events/e1/notes/other'), { text: 'x', updatedAt: serverTimestamp() }));
+  // Read-only assistants cannot write notes; nobody deletes them.
+  await assertFails(setDoc(doc(db('readonly'), 'events/e1/notes/planning'), { ...note, updatedBy: 'readonly' }));
+  await assertFails(deleteDoc(doc(owner, 'events/e1/notes/planning')));
+  // Only the three note fields are allowed, and text must be a string.
+  await assertFails(setDoc(doc(muse, 'events/e1/notes/bad'), { ...note, extra: 1 }));
+  await assertFails(setDoc(doc(muse, 'events/e1/notes/bad2'), { text: 42, updatedAt: serverTimestamp(), updatedBy: 'muse' }));
 });

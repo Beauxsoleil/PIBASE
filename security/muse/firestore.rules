@@ -96,14 +96,12 @@ service cloud.firestore {
       return d.keys().hasOnly(['name', 'statusStage', 'age', 'generalArea',
           'priorService', 'educationLevel', 'nextAction', 'nextActionDate',
           'precedence', 'updatedAt', 'createdAt', 'archived', 'archiveFolder',
-          'archivedFiscalYear', 'updatedBy'])
+          'updatedBy'])
         && nonempty(d.get('name', ''))
         && d.get('updatedAt', null) is timestamp
         && (d.get('createdAt', null) == null || d.createdAt is timestamp)
         && (d.get('age', null) == null || d.age is int)
         && (d.get('archived', null) == null || d.archived is bool)
-        && (d.get('archivedFiscalYear', null) == null
-          || d.archivedFiscalYear is int)
         && (d.get('statusStage', null) == null || d.statusStage is string)
         && (d.get('generalArea', null) == null || d.generalArea is string)
         && (d.get('priorService', null) == null || d.priorService is string)
@@ -183,8 +181,8 @@ service cloud.firestore {
       // The SURVEY sync worker may mirror the leads it creates (same
       // deterministic IDs). Create-only, like its applicant writes:
       // the worker never updates records. Optional until the worker is
-      // updated; until then its leads appear on the kiosk after the next
-      // edit or rebuild.
+      // updated; until then the editor's drift check flags its leads as
+      // missing and a rebuild mirrors them (see docs/privacy-hardening.md).
       allow create: if syncer() && mirrorAttributed()
         && validKioskApplicant()
         && id.matches('^survey-[0-9a-fA-F-]{36}$');
@@ -195,19 +193,59 @@ service cloud.firestore {
     }
     match /events/{id} {
       allow read: if reader() || kiosk();
-      allow create, update: if writer()
+      // Event notes live in the reader-only subcollection below, never in
+      // the kiosk-readable parent doc: a create must not carry them, and
+      // an update must not touch them (legacy in-doc values, if any, stay
+      // untouched until the console cleanup — see docs/privacy-hardening.md).
+      allow create: if writer()
         && nonempty(request.resource.data.get('name', ''))
         && (request.resource.data.get('date', null) == null || request.resource.data.date is string)
+        && !('notes' in request.resource.data)
+        && !('resultNotes' in request.resource.data)
+        && (owner() || attributed());
+      allow update: if writer()
+        && nonempty(request.resource.data.get('name', ''))
+        && (request.resource.data.get('date', null) == null || request.resource.data.date is string)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['notes', 'resultNotes'])
         && (owner() || attributed());
       allow delete: if false;
+      // Planning and result notes are reader-only: the kiosk role has no
+      // allow here, so it cannot read this subcollection at all. One doc
+      // per note kind ('planning' / 'results'), {text, updatedAt,
+      // updatedBy}; free-text only, no structured fields.
+      match /notes/{noteId} {
+        allow read: if reader();
+        allow create, update: if writer() && (owner() || attributed())
+          && request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy'])
+          && request.resource.data.get('text', null) is string;
+        allow delete: if false;
+      }
     }
     match /eventResults/{id} {
       allow read: if reader() || kiosk();
-      allow create, update: if writer()
+      // Result notes live in the reader-only subcollection below, never
+      // in the kiosk-readable parent doc (same freeze pattern as events).
+      allow create: if writer()
         && nonempty(request.resource.data.get('summary', ''))
         && request.resource.data.get('start', null) is string
+        && !('resultNotes' in request.resource.data)
+        && (owner() || attributed());
+      allow update: if writer()
+        && nonempty(request.resource.data.get('summary', ''))
+        && request.resource.data.get('start', null) is string
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['resultNotes'])
         && (owner() || attributed());
       allow delete: if false;
+      // One doc ('results'), {text, updatedAt, updatedBy}; reader-only.
+      match /notes/{noteId} {
+        allow read: if reader();
+        allow create, update: if writer() && (owner() || attributed())
+          && request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy'])
+          && request.resource.data.get('text', null) is string;
+        allow delete: if false;
+      }
     }
     match /settings/mission {
       allow read: if reader() || kiosk();

@@ -121,6 +121,32 @@ test('overlapping polls suppressed',()=>{const b=boot();login(b);const n=b.reque
 test('calendar UTC parsing and escaped text',()=>{
  const b=boot();const rows=b.api.parseCalendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261102T180000Z\nSUMMARY:School\\, visit\nLOCATION:Room\\nTwo\nEND:VEVENT\nEND:VCALENDAR');assert.equal(rows[0].time,Date.UTC(2026,10,2,18));assert.equal(rows[0].title,'School, visit');assert.equal(rows[0].location,'Room Two');
 });
+test('calendar parser drops sensitive events',()=>{
+ const b=boot();const rows=b.api.parseCalendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20261120T150000Z\nSUMMARY:School visit\nLOCATION:Twin Falls High\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261121T150000Z\nSUMMARY:DUI hearing\nLOCATION:Courthouse\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261122T150000Z\nSUMMARY:Check-in\nLOCATION:Probation Office\nEND:VEVENT\nEND:VCALENDAR');
+ assert.equal(rows.length,1);assert.equal(rows[0].title,'School visit');
+});
+test('events slide drops sensitive events and results',()=>{
+ const b=boot();login(b);
+ const pending=b.requests.splice(0);
+ for(const req of pending){
+   if(req.url.includes('/kioskApplicants?'))req.respond(200,{documents:[applicant('A','Synthetic Alpha')]});
+   else if(req.url.includes('/events?'))req.respond(200,{documents:[
+     {name:'projects/demo/databases/(default)/documents/events/e1',fields:{name:{stringValue:'School visit'},date:{stringValue:'2026-11-20'},location:{stringValue:'Twin Falls High'}}},
+     {name:'projects/demo/databases/(default)/documents/events/e2',fields:{name:{stringValue:'DUI hearing'},date:{stringValue:'2026-11-21'},location:{stringValue:'Courthouse'}}}
+   ]});
+   else if(req.url.includes('/eventResults?'))req.respond(200,{documents:[
+     {name:'projects/demo/databases/(default)/documents/eventResults/r1',fields:{summary:{stringValue:'Therapist appointment'},start:{stringValue:'2026-11-19'},location:{stringValue:'Clinic'}}}
+   ]});
+   else if(req.url.includes('/settings/'))req.respond(404,{});
+   else if(req.url.includes('calendar.ics'))req.respond(200,'BEGIN:VCALENDAR\nEND:VCALENDAR');
+   else throw Error('Unexpected request '+req.url);
+ }
+ for(let i=0;i<600 && !/Recruiting Events/.test(b.el('section').textContent);i++)b.api.rotate();
+ assert.match(b.el('section').textContent,/Recruiting Events/);
+ assert.match(b.el('inner').innerHTML,/School visit/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/DUI hearing/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Therapist appointment/);
+});
 test('overflow scrolls before rotating; ordinary slides rotate automatically',()=>{
  const b=boot();login(b);complete(b);b.el('viewport').scrollHeight=700;for(let i=0;i<32;i++)b.api.rotate();assert.ok(b.el('viewport').scrollTop>0);assert.match(b.el('section').textContent,/Applicants/);
  b.el('viewport').scrollTop=200;for(let i=0;i<45;i++)b.api.rotate();assert.match(b.el('section').textContent,/Today/);

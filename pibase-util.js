@@ -115,11 +115,17 @@ export function restoreStageFor(applicant) {
 // full applicant document, which kiosk authentication cannot read.
 // Keep this list in sync with validKioskApplicant() in firestore.rules
 // and with the kioskApplicants tests.
+//
+// Minimization notes (Nov 2026 review): archivedFiscalYear was dropped —
+// no kiosk screen reads it (Previous FY grouping is editor-only).
+// updatedBy stays because the rules use it to attribute mirror writes
+// (mirrorAttributed); it is never rendered. age, priorService, and
+// educationLevel stay because both kiosk card layouts render them.
 export const KIOSK_APPLICANT_FIELDS = [
   'name', 'statusStage', 'age', 'generalArea', 'priorService',
   'educationLevel', 'nextAction', 'nextActionDate', 'precedence',
   'updatedAt', 'createdAt', 'archived', 'archiveFolder',
-  'archivedFiscalYear', 'updatedBy'
+  'updatedBy'
 ];
 
 // Build the sanitized kiosk copy of an applicant: only allowlisted fields,
@@ -143,9 +149,155 @@ export function sanitizeForKiosk(applicant) {
     createdAt: a.createdAt ?? null,
     archived: a.archived === true,
     archiveFolder: a.archiveFolder ?? null,
-    archivedFiscalYear: a.archivedFiscalYear ?? null,
     updatedBy: a.updatedBy ?? ''
   };
+}
+
+// Display fields compared when deciding whether a mirror is in sync.
+// updatedBy is attribution, not display data, and is excluded; timestamps
+// are compared separately with a tolerance (see mirrorMatchesApplicant).
+const MIRROR_DISPLAY_FIELDS = ['name', 'statusStage', 'age', 'generalArea',
+  'priorService', 'educationLevel', 'nextAction', 'nextActionDate',
+  'precedence', 'archived', 'archiveFolder'];
+
+// True when a stored mirror shows the same data as the applicant.
+// Timestamps compare with a tolerance: the applicant save and its mirror
+// write resolve independent serverTimestamp() sentinels, so they differ
+// by seconds even on a healthy save. Five minutes is far above that
+// skew and far below the 30-day Review window the timestamps drive.
+// Extra keys on an old mirror (e.g. a field cut from the allowlist later)
+// do not count as drift: the kiosk ignores unknown fields, and the next
+// save or rebuild rewrites the mirror without them.
+export function mirrorMatchesApplicant(mirror, applicant, toleranceMs = 300000) {
+  if (!mirror || !applicant) return false;
+  const m = sanitizeForKiosk(mirror);
+  const a = sanitizeForKiosk(applicant);
+  for (const key of MIRROR_DISPLAY_FIELDS) {
+    if (m[key] !== a[key]) return false;
+  }
+  for (const key of ['updatedAt', 'createdAt']) {
+    const mt = timestampMillis(m[key]);
+    const at = timestampMillis(a[key]);
+    if (mt === 0 && at === 0) continue;
+    if (Math.abs(mt - at) > toleranceMs) return false;
+  }
+  return true;
+}
+
+// Compare a loaded applicant list against stored mirrors (both plain
+// arrays of {id, ...}). Returns {checked, mirrorCount, missing, stale,
+// extra}: missing = applicant with no mirror (e.g. a SURVEY lead created
+// by the external worker before it learned to mirror), stale = mirror
+// exists but its content is behind, extra = mirror with no applicant
+// (orphan; mirrors are never deleted client-side, so an extra needs a
+// console delete — it is reported, never auto-fixed).
+export function findMirrorDrift(applicants, mirrors) {
+  const apps = Array.isArray(applicants) ? applicants : [];
+  const mirs = Array.isArray(mirrors) ? mirrors : [];
+  const byId = new Map();
+  for (const m of mirs) if (m?.id) byId.set(m.id, m);
+  const missing = [];
+  const stale = [];
+  const seen = new Set();
+  for (const a of apps) {
+    if (!a?.id) continue;
+    seen.add(a.id);
+    const m = byId.get(a.id);
+    if (!m) missing.push(a.id);
+    else if (!mirrorMatchesApplicant(m, a)) stale.push(a.id);
+  }
+  const extra = [];
+  for (const id of byId.keys()) if (!seen.has(id)) extra.push(id);
+  return { checked: seen.size, mirrorCount: byId.size, missing, stale, extra };
+}
+
+// ---- Mirror sync queue --------------------------------------------------
+// A failed mirror write must be detectable and recoverable, not a silent
+// console warning. The queue records failures (in memory only — never
+// persisted, so no applicant PII is written to storage), notifies the UI
+// through onChange, and retries with fresh applicant data when asked.
+// The write function is injected so the queue stays pure and unit-testable;
+// firebase-config.js wires it to writeKioskMirror and dispatches a
+// 'pibase:mirror-sync' DOM event from onChange.
+export function createMirrorSyncQueue({ write, onChange } = {}) {
+  const pending = new Map(); // id -> {data, attempts, lastError, lastTry}
+  const notify = () => {
+    if (typeof onChange !== 'function') return;
+    try { onChange(status()); } catch (_) { /* UI listener must never break sync */ }
+  };
+  function status() {
+    return { pending: [...pending.keys()], count: pending.size };
+  }
+  // Best-effort mirror write: resolves even on failure (a failed mirror
+  // must never fail the applicant save that triggered it).
+  async function request(id, data) {
+    if (!id) return;
+    try {
+      await write(id, data);
+      if (pending.delete(id)) notify();
+    } catch (error) {
+      const prev = pending.get(id);
+      pending.set(id, {
+        data,
+        attempts: (prev?.attempts || 0) + 1,
+        lastError: error?.code || 'unknown',
+        lastTry: Date.now()
+      });
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('PIBASE kiosk mirror update failed — retry from the applicant list.', error);
+      }
+      notify();
+    }
+  }
+  // Retry every pending mirror. resolveData(id) returns the current
+  // applicant record when available, so a retry never overwrites a mirror
+  // with data made stale by a later edit; without fresh data the failed
+  // snapshot is retried as-is.
+  async function retry(resolveData, uid) {
+    let repaired = 0;
+    let failed = 0;
+    for (const id of [...pending.keys()]) {
+      const entry = pending.get(id);
+      if (!entry) continue;
+      const fresh = typeof resolveData === 'function' ? resolveData(id) : null;
+      const data = fresh
+        ? { ...fresh, updatedBy: uid || fresh.updatedBy || '' }
+        : entry.data;
+      try {
+        await write(id, data);
+        pending.delete(id);
+        repaired++;
+      } catch (error) {
+        entry.attempts++;
+        entry.lastError = error?.code || 'unknown';
+        entry.lastTry = Date.now();
+        failed++;
+      }
+    }
+    notify();
+    return { repaired, failed };
+  }
+  // Record a failure without attempting a write (used by the rebuild
+  // fallback when a single-document retry fails).
+  function markFailed(id, data, error) {
+    if (!id) return;
+    const prev = pending.get(id);
+    pending.set(id, {
+      data,
+      attempts: (prev?.attempts || 0) + 1,
+      lastError: error?.code || 'unknown',
+      lastTry: Date.now()
+    });
+    notify();
+  }
+  // Clear pending entries: all of them, or just the given ids (a
+  // successful rebuild clears the ids it rewrote).
+  function clear(ids) {
+    if (ids === undefined) pending.clear();
+    else for (const id of ids) pending.delete(id);
+    notify();
+  }
+  return { request, retry, status, clear, markFailed };
 }
 
 // ---- Medical / legal tri-state flags ------------------------------------
