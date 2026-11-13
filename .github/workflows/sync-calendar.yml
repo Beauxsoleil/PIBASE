@@ -44,15 +44,33 @@ jobs:
 
           grep -q 'BEGIN:VCALENDAR' calendar.full.ics
 
-          # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub's runner. The Pi
+          # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub’s runner. The Pi
           # receives only flattened event instances and four display fields.
           python3 - <<'PY'
           import hashlib
+          import re
           from datetime import date, datetime, timedelta, timezone
           from pathlib import Path
           from zoneinfo import ZoneInfo
           import icalendar
           import recurring_ical_events
+
+          # Medical/legal keyword stems shared with containsSensitiveNotePattern
+          # in pibase-util.js (and the ES5 copy in ipad.html) — keep the
+          # lists in sync. An event whose SUMMARY or LOCATION matches is
+          # published as a generic "Private event" with no location, so
+          # sensitive detail never reaches the public kiosk feed.
+          SENSITIVE_STEMS = ('diagnos', 'medication', 'prescri', 'dosage',
+                             'surgery', 'therapist', 'psychiatr', 'psycholog',
+                             'adhd', 'asthma', 'diabetes', 'seizure',
+                             'depression', 'anxiety', 'ptsd', 'bipolar',
+                             'insulin', 'inhaler', 'arrest', 'convict',
+                             'felony', 'misdemeanor', 'probation', 'parole',
+                             'jail', 'prison', 'dui', 'dwi', 'lawsuit',
+                             'warrant', 'theft', 'assault', 'burglary',
+                             'robbery', 'drug', 'marijuana', 'cocaine')
+          SENSITIVE_RE = re.compile(r'\b(?:' + '|'.join(SENSITIVE_STEMS) + r')\w*\b',
+                                    re.IGNORECASE)
 
           source = Path('calendar.full.ics').read_bytes()
           calendar = icalendar.Calendar.from_ical(source)
@@ -106,8 +124,14 @@ jobs:
                   else:
                       end = start + timedelta(days=1)
 
-              summary = clean_text(event.get('SUMMARY', 'Untitled event'))
-              location = clean_text(event.get('LOCATION', ''))
+              raw_summary = str(event.get('SUMMARY', 'Untitled event') or '')
+              raw_location = str(event.get('LOCATION', '') or '')
+              if SENSITIVE_RE.search(raw_summary) or SENSITIVE_RE.search(raw_location):
+                  # The time slot stays (so the day is not silently empty)
+                  # but the title becomes generic and the location is dropped.
+                  raw_summary, raw_location = 'Private event', ''
+              summary = clean_text(raw_summary)
+              location = clean_text(raw_location)
               # Preserve the iCloud UID so the phone can attach results to a
               # calendar event without re-creating it. Recurring instances
               # share a UID, so the client keys on UID + start date.
