@@ -44,7 +44,7 @@ jobs:
 
           grep -q 'BEGIN:VCALENDAR' calendar.full.ics
 
-          # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub’s runner. The Pi
+          # Expand RRULE/RDATE/EXDATE/RECURRENCE-ID on GitHub's runner. The Pi
           # receives only flattened event instances and four display fields.
           python3 - <<'PY'
           import hashlib
