@@ -42,6 +42,12 @@ export function initEventsUi({ db, collection, onSnapshot, query, orderBy }) {
     const territory=document.createElement('section');territory.className='screen';territory.id='territoryScreen';territory.innerHTML=`<div class="territory-layout"><div class="territory-panel"><div class="territory-head"><div class="territory-title">Applicants by Area</div><div class="territory-meta" id="territoryAssigned">0 assigned</div></div><div class="territory-list" id="territoryList"></div></div><div class="territory-panel"><div class="territory-head"><div class="territory-title">Territory Picture</div><div class="territory-meta">Live pipeline</div></div><div class="territory-stats"><div class="territory-stat"><div class="territory-stat-value" id="territoryLargest">—</div><div class="territory-stat-label">Largest area</div></div><div class="territory-stat"><div class="territory-stat-value" id="territoryUnassigned">0</div><div class="territory-stat-label">Unassigned</div></div><div class="territory-stat"><div class="territory-stat-value" id="territoryActive">0</div><div class="territory-stat-label">Active</div></div><div class="territory-stat"><div class="territory-stat-value" id="territoryEnlisted">0</div><div class="territory-stat-label">Enlisted</div></div></div><div class="territory-matrix" id="territoryMatrix"></div><div class="territory-note">Stage mix groups early pipeline, processing, Q&amp;E, and enlisted applicants by saved general area.</div></div></div><div class="kiosk-hint">↑ ↓ screens</div>`;board.insertBefore(territory,detail);
 
     let eventDocs=[],resultDocs=[],applicants=docsOf(window.__PIBASE_APPLICANTS__).concat(docsOf(window.__PIBASE_ENLISTED__)),activeExtra=null,routeOrigin=null,eventKey='',territoryKey='';
+    // Last native screen (0 board, 1 today, 2 calendar, 3 pipeline) that
+    // was active before an extra screen took over. A local key exit from
+    // a remotely selected extra has no routeOrigin, so without this the
+    // kiosk would be left with no screen active at all.
+    let lastNativeIndex=3;
+    const NATIVE_IDS=['boardScreen','todayScreen','calendarScreen','pipelineScreen'];
     const AREAS=['Twin Falls','Burley','Rupert','Filer','Other'],GROUPS=['Early','Processing','Q&E','Enlisted'];
     const esc=v=>{const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML},num=v=>Math.max(0,Number(v)||0),parseDate=v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const[y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)},today=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
     const areaOf=a=>{const raw=(a.generalArea||a.area||a.location||'').trim();return AREAS.includes(raw)?raw:(raw?'Other':'Unassigned')};
@@ -66,9 +72,18 @@ export function initEventsUi({ db, collection, onSnapshot, query, orderBy }) {
     const receive=()=>{applicants=docsOf(window.__PIBASE_APPLICANTS__).concat(docsOf(window.__PIBASE_ENLISTED__));if(territory.classList.contains('active'))renderTerritory();};if(window.__PIBASE_APPLICANTS__)receive();window.addEventListener('pibase:applicants-snapshot',()=>receive());
     onSnapshot(query(collection(db,'events'),orderBy('date','asc')),snap=>{eventDocs=docsOf(snap);if(events.classList.contains('active'))renderEvents();},err=>{console.warn('Recruiting events unavailable',err);const el=document.getElementById('eventsUpcoming');if(el)el.innerHTML='<div class="events-empty">Unable to load recruiting events.</div>';});onSnapshot(collection(db,'eventResults'),snap=>{resultDocs=docsOf(snap);if(events.classList.contains('active'))renderEvents();},err=>{console.warn('Calendar event results unavailable',err);});
 
-    function showExtra(screen,name,origin=routeOrigin){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));screen.classList.add('active');title.textContent=name;activeExtra=screen;routeOrigin=origin;if(screen===events)renderEvents(true);else renderTerritory(true);announce(screen.id,name);}
-    function showNative(screen,name){events.classList.remove('active');territory.classList.remove('active');screen.classList.add('active');title.textContent=name;activeExtra=null;announce(screen.id,name);}
-    function hideForNative(){events.classList.remove('active');territory.classList.remove('active');activeExtra=null;requestAnimationFrame(()=>announce(document.querySelector('.screen.active')?.id||'',title.textContent));}
+    function showExtra(screen,name,origin=routeOrigin){
+      const activeNative=NATIVE_IDS.map(id=>document.getElementById(id)).find(el=>el&&el.classList.contains('active'));
+      if(activeNative)lastNativeIndex=NATIVE_IDS.indexOf(activeNative.id);
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));screen.classList.add('active');title.textContent=name;activeExtra=screen;routeOrigin=origin;if(screen===events)renderEvents(true);else renderTerritory(true);announce(screen.id,name);}
+    function showNative(screen,name){events.classList.remove('active');territory.classList.remove('active');screen.classList.add('active');title.textContent=name;activeExtra=null;routeOrigin=null;announce(screen.id,name);}
+    function hideForNative(){
+      events.classList.remove('active');territory.classList.remove('active');activeExtra=null;
+      // Return through the canonical remote-screen path so display.html
+      // re-activates (and re-renders) the last native screen instead of
+      // leaving the kiosk with no screen active.
+      window.dispatchEvent(new CustomEvent('pibase:remote-screen',{detail:{index:lastNativeIndex}}));
+    }
 
     document.addEventListener('keydown',e=>{
       if(e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey)return;
@@ -91,7 +106,7 @@ export function initEventsUi({ db, collection, onSnapshot, query, orderBy }) {
       else if(e.key==='ArrowUp'&&boardScreen.classList.contains('active')){e.preventDefault();e.stopPropagation();showExtra(territory,'Territory Analytics','board');}
       else if(e.key==='ArrowUp'||e.key==='ArrowDown'){requestAnimationFrame(()=>{announce(document.querySelector('.screen.active')?.id||'',title.textContent);});}
     },true);
-    window.addEventListener('pibase:remote-screen',e=>{const n=e.detail?.index;if(n===4)showExtra(events,'Recruiting Events');else if(n===5)showExtra(territory,'Territory Analytics');else if(Number.isInteger(n)&&n>=0&&n<=3){events.classList.remove('active');territory.classList.remove('active');activeExtra=null;}});
+    window.addEventListener('pibase:remote-screen',e=>{const n=e.detail?.index;if(n===4)showExtra(events,'Recruiting Events');else if(n===5)showExtra(territory,'Territory Analytics');else if(Number.isInteger(n)&&n>=0&&n<=3){events.classList.remove('active');territory.classList.remove('active');activeExtra=null;routeOrigin=null;}});
     window.addEventListener('resize',()=>{if(events.classList.contains('active'))renderEvents();else if(territory.classList.contains('active'))renderTerritory();});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();

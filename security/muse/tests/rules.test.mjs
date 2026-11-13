@@ -189,6 +189,49 @@ test('daily reminder permits enrolled reads and owner dismissal only', async () 
   await assertFails(getDoc(doc(db('kiosk', 'anonymous'), path)));
 });
 
+// ---- Kiosk remote control (settings/kioskControl, PR #43) ----
+
+test('kiosk remote: owner-only writes, kiosk read-only, everyone else denied', async () => {
+  const ref = uid => doc(db(uid), 'settings/kioskControl');
+  const payload = uid => ({ screen: 3, updatedBy: uid, updatedAt: serverTimestamp() });
+  // Owner creates and updates with a valid screen index (0-6).
+  await assertSucceeds(setDoc(ref('owner'), payload('owner')));
+  await assertSucceeds(updateDoc(ref('owner'), { screen: 6, updatedBy: 'owner', updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(ref('owner'), { screen: 0, updatedBy: 'owner', updatedAt: serverTimestamp() }));
+  await assertSucceeds(getDoc(ref('owner')));
+  // Owner payload validation: screen must be an int in range, only the
+  // three keys, own UID, server timestamp.
+  await assertFails(setDoc(ref('owner'), { ...payload('owner'), screen: 7 }));
+  await assertFails(setDoc(ref('owner'), { ...payload('owner'), screen: -1 }));
+  await assertFails(setDoc(ref('owner'), { ...payload('owner'), screen: '3' }));
+  await assertFails(setDoc(ref('owner'), { ...payload('owner'), extra: 'nope' }));
+  await assertFails(setDoc(ref('owner'), { screen: 3, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(ref('owner'), { ...payload('owner'), updatedBy: 'muse' }));
+  await assertFails(setDoc(ref('owner'), { screen: 3, updatedBy: 'owner', updatedAt: new Date('2020-01-01') }));
+  // Anonymous sign-in is never the owner, even with the owner's UID.
+  await assertFails(getDoc(doc(db('owner', 'anonymous'), 'settings/kioskControl')));
+  await assertFails(setDoc(doc(db('owner', 'anonymous'), 'settings/kioskControl'), payload('owner')));
+  // Enrolled kiosk reads the selection but can never write it.
+  const kiosk = db('kiosk', 'anonymous');
+  await assertSucceeds(getDoc(doc(kiosk, 'settings/kioskControl')));
+  await assertFails(setDoc(doc(kiosk, 'settings/kioskControl'), payload('kiosk')));
+  await assertFails(updateDoc(doc(kiosk, 'settings/kioskControl'), { screen: 1, updatedBy: 'kiosk', updatedAt: serverTimestamp() }));
+  await assertFails(deleteDoc(doc(kiosk, 'settings/kioskControl')));
+  // Assistants, reviewers, and the sync worker cannot read or write it.
+  for (const uid of ['muse', 'readonly', 'reviewer1', 'sync']) {
+    await assertFails(getDoc(ref(uid)));
+    await assertFails(setDoc(ref(uid), payload(uid)));
+    await assertFails(updateDoc(ref(uid), { screen: 1, updatedBy: uid, updatedAt: serverTimestamp() }));
+  }
+  // Unknown, disabled, and unauthenticated clients see nothing.
+  for (const client of [db('unknown'), db('disabled'), env.unauthenticatedContext().firestore()]) {
+    await assertFails(getDoc(doc(client, 'settings/kioskControl')));
+    await assertFails(setDoc(doc(client, 'settings/kioskControl'), { screen: 1, updatedBy: 'unknown', updatedAt: serverTimestamp() }));
+  }
+  // Nobody deletes the control document, not even the owner.
+  await assertFails(deleteDoc(ref('owner')));
+});
+
 // Shared-project regression: synthetic records only, same emulator as PIBASE.
 async function seedWarrior() {
   await env.withSecurityRulesDisabled(async ctx => {

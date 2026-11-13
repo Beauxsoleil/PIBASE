@@ -46,7 +46,7 @@ export function initKioskRuntime() {
     if (!document.getElementById('pibaseScreenIndicator')) {
       const indicator = document.createElement('div');
       indicator.id = 'pibaseScreenIndicator';
-      indicator.textContent = '1 / 6 · Applicant Board';
+      indicator.textContent = '4 / 7 · Pipeline / Mission';
       document.body.appendChild(indicator);
     }
     renderStatus();
@@ -80,6 +80,10 @@ export function initKioskRuntime() {
     if (!indicator) return;
     const detail = document.getElementById('detailView');
     if (detail?.classList.contains('open')) { indicator.textContent = 'Applicant Detail'; return; }
+    // Video is an overlay, not a .screen section, so no screen element is
+    // active while it plays; detect it directly instead of falling back
+    // to the Applicant Board label.
+    if (document.getElementById('pibaseVideoOverlay')?.classList.contains('active')) { indicator.textContent = '7 / 7 · Video'; return; }
     const order = [['boardScreen','Applicant Board'],['todayScreen','Today'],['calendarScreen','Calendar'],['pipelineScreen','Pipeline / Mission'],['eventsScreen','Recruiting Events'],['territoryScreen','Territory Analytics'],['videoScreen','Video']];
     const index = order.findIndex(([id]) => document.getElementById(id)?.classList.contains('active'));
     const resolved = index >= 0 ? index : 0;

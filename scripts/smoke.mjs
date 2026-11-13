@@ -1,6 +1,6 @@
 // CI smoke test for pibase-util.js — no browser or Firebase required.
 import assert from 'node:assert';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -381,5 +381,54 @@ for (const marker of ['kioskApplicants', 'validKioskApplicant', 'mirrorAttribute
 // on applicants — the freeze list there is separate and must stay).
 const mirrorFn = museRules.slice(museRules.indexOf('function validKioskApplicant()'), museRules.indexOf('function mirrorAttributed()'));
 assert.ok(!mirrorFn.includes('archivedFiscalYear'), 'validKioskApplicant must not allow archivedFiscalYear');
+
+// ---- Kiosk remote control (PR #43) -----------------------------------
+// The phone remote drives the Pi through settings/kioskControl; the
+// kiosk listens and switches screens. These are static checks — the
+// navigation behavior itself is exercised by kiosk-remote-smoke.mjs,
+// imported below so it runs under this same CI step.
+const controlSrc = await readFile(join(root, 'kiosk-control.js'), 'utf8');
+const swSrc = await readFile(join(root, 'service-worker.js'), 'utf8');
+assert.ok(controlSrc.includes("doc(db,'settings','kioskControl')"), 'remote must address settings/kioskControl');
+assert.ok(controlSrc.includes("video.addEventListener('error'"), 'video load failure must be surfaced');
+assert.ok(controlSrc.includes('__PIBASE_VIDEO_ERROR__'), 'video error flag must exist for diagnosis');
+assert.ok(controlSrc.includes('Still sending — will apply when the phone reconnects.'), 'offline send must not hang the button');
+assert.ok(controlSrc.includes('video.play().then('), 'successful playback must clear the video error flag');
+// Seven screens, same order on both sides of the remote.
+assert.ok(controlSrc.includes("['Applicant Board','Today','Calendar','Pipeline / Mission','Recruiting Events','Territory Analytics','Video']"), 'remote labels must list all seven screens');
+assert.ok(kioskRuntime.includes("'7 / 7 · Video'"), 'screen indicator must label the video screen');
+assert.ok(kioskRuntime.includes('pibaseVideoOverlay'), 'screen indicator must detect the video overlay');
+assert.ok(kioskRuntime.includes("'4 / 7 · Pipeline / Mission'"), 'screen indicator default must match the launch screen');
+// The remote-screen handler must close any open applicant detail even
+// for the extra screens (4/5), or the detail stays open over them.
+assert.ok(displayHtml.includes('if(!Number.isInteger(n)||n<0||n>5)return;'), 'remote-screen handler must accept 0-5 and reset the detail view');
+// Exiting a remotely selected extra screen must return to a native
+// screen through the canonical path, never to a blank kiosk.
+assert.ok(eventsUi.includes('lastNativeIndex'), 'events-ui must remember the last native screen');
+assert.ok(eventsUi.includes("pibase:remote-screen',{detail:{index:lastNativeIndex}}"), 'extra-screen exit must request the last native screen');
+assert.ok(eventsUi.includes('routeOrigin=null'), 'leaving an extra screen must clear the stale route');
+// The service worker must serve kiosk-control.js network-first like
+// the other app code, and the cache version must match the pin in
+// sfs-smoke.mjs.
+assert.ok(swSrc.includes('kiosk-control\\.js'), 'service worker must route kiosk-control.js as app code');
+assert.ok(swSrc.includes("const CACHE_NAME = 'pibase-app-v43';"), 'service worker cache must be v43');
+// Rules: the control document exists, owner-write only, screen 0-6.
+assert.ok(museRules.includes('match /settings/kioskControl'), 'rules must cover settings/kioskControl');
+assert.ok(museRules.includes('request.resource.data.screen <= 6'), 'rules must bound the screen index');
+// The remote loads on the phone editor and the Pi kiosk only — never on
+// the legacy iPad, whose ES5 page must not gain module scripts.
+assert.ok(indexHtml.includes('<script type="module" src="./kiosk-control.js"></script>'), 'index.html must load the remote');
+assert.ok(displayHtml.includes('<script type="module" src="./kiosk-control.js"></script>'), 'display.html must load the remote');
+assert.ok(!ipadHtml.includes('kiosk-control.js'), 'ipad.html must not load the remote');
+// Companions stay disabled on the kiosk, with source files preserved.
+assert.ok(!displayHtml.includes('src="./boudreaux-kiosk.js"'), 'kiosk must not load Boudreaux');
+assert.ok(!displayHtml.includes('src="./thibodeaux-kiosk.js"'), 'kiosk must not load Thibodeaux');
+for (const companion of ['boudreaux-kiosk.js', 'thibodeaux-kiosk.js', 'boudreaux-mobile.js', 'thibideaux-mobile.js']) {
+  assert.ok((await stat(join(root, companion))).size > 0, `${companion} must be preserved`);
+}
+// The kiosk video asset is in the repo and non-empty.
+assert.ok((await stat(join(root, 'assets', 'kiosk-1080p.mp4'))).size > 1000000, 'kiosk-1080p.mp4 must be present');
+
+await import('./kiosk-remote-smoke.mjs');
 
 console.log(`smoke OK (${committed.length} committed events)`);

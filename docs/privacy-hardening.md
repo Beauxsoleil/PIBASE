@@ -593,3 +593,118 @@ data migration is needed in either direction: 11-field mirrors satisfy
 the 14-field rules, and the old display code renders an empty meta line
 for mirrors that lack the cut fields. A **Rebuild kiosk data** after a
 rollback restores the 14-field mirrors.
+
+## 9. Kiosk video screen and authenticated phone remote (Nov 13, 2026)
+
+### What it is
+
+The Pi kiosk now has seven screens, selected live from the phone
+editor through Firestore. The screens, in remote order, are:
+Applicant Board (0), Today (1), Calendar (2), Pipeline / Mission
+(3), Recruiting Events (4), Territory Analytics (5), and Video (6).
+The Video screen is a fullscreen looping overlay playing
+`assets/kiosk-1080p.mp4` (58-second Idaho Guard loop, H.264 High
+profile, 1920x1080, 30fps, no audio track). The video is NOT
+pre-cached by the service worker: it streams from the site on first
+play so the SW install stays small. The phone panel lives on the
+applicant list screen ("Kiosk screen control") and shows the current
+selection; a tap sends the new screen and the kiosk switches within
+a second when both devices are online.
+
+The control plane carries no applicant data: the document
+`settings/kioskControl` holds only `{screen, updatedAt, updatedBy}`.
+
+### Rules
+
+`match /settings/kioskControl` (both rules copies):
+
+- Read: owner or enrolled kiosk only.
+- Create/update: owner only, keys exactly `screen`, `updatedAt`,
+  `updatedBy`; `screen` an int 0-6; `updatedBy` the owner's UID;
+  `updatedAt` the server timestamp.
+- Delete: nobody.
+
+Assistants, reviewers, the SURVEY sync role, and unauthenticated
+clients cannot read or write the control document, so they cannot
+see or change the kiosk screen. The kiosk reads the selection but
+cannot write it. The rules tests cover all of this
+(`security/muse/tests/rules.test.mjs`, "kiosk remote" test). The
+existing applicant protections are unchanged: the kiosk still reads
+only the sanitized `kioskApplicants` mirrors, never full applicant
+documents.
+
+### Navigation fixes (this PR)
+
+Two dead ends found in review, both fixed and covered by
+`scripts/kiosk-remote-smoke.mjs` (10 behavioral tests, run under
+the smoke CI step):
+
+1. Leaving a remotely selected Recruiting Events or Territory
+   Analytics screen with the local arrow keys left the kiosk with no
+   screen active (blank display). The exit now returns to the last
+   native screen through the canonical remote-screen path.
+2. Remote-selecting Events/Territory while an applicant detail was
+   open left the detail view open over the extra screen. The
+   remote-screen handler now closes the detail for every screen
+   index, not just the four native ones.
+
+Also fixed: the screen indicator showed "Applicant Board" while the
+video played (it now shows "7 / 7 · Video"); the service worker now
+serves `kiosk-control.js` network-first like the other app code
+(it was precached but never served from cache); a video load/decode
+failure now sets `window.__PIBASE_VIDEO_ERROR__` instead of failing
+silently to a black overlay; and a phone send that cannot reach
+Firestore re-enables its button after 10 seconds instead of hanging
+on "Sending…".
+
+### Video on the Raspberry Pi 2
+
+Pi 2 Chromium has no hardware video decode, so the 1080p file is
+decoded in software on four Cortex-A7 cores. The file is light
+(~560 kbps, faststart moov), but 1080p30 software decode is
+marginal on this hardware: expect dropped frames or stutter. If the
+Pi test shows stutter, switch the kiosk to the 720p render
+(1280x720, ~320 kbps, same 58-second loop) — do not delete the
+1080p file; the 720p version is a fallback, not a replacement, until
+it is verified on the Pi. The video fills a 16:9 display exactly
+(`object-fit: contain` on a 16:9 source); on a non-16:9 display it
+letterboxes rather than distorting.
+
+### Hosting correction
+
+PIBASE is served by **GitHub Pages** at
+`beauxsoleil.github.io/PIBASE` (verified live Nov 13, 2026). There
+is no Cloudflare Pages deployment for this repo: no CNAME, no
+Cloudflare configuration files, and the live Pages URL serves the
+current `main`. Publication is the normal Pages flow after merge.
+
+### Deployment sequence (this PR — code + rules)
+
+1. **Merge** after CI + rules tests are green. Cache bumps v42
+   to v43; the Pi picks it up on its idle reload (about an hour)
+   or a manual browser reload, the iPad on its daily reload.
+2. **Publish the Firestore rules** — Joel's explicit approval
+   required, as always. Until the new rules are live, the remote
+   does nothing: the kiosk cannot read `settings/kioskControl`
+   and the phone cannot write it (both get permission-denied),
+   and the Video screen is unreachable (it has no local entry).
+   Publish via the console or CLI from `security/muse/` (the
+   canonical copy); the root `firestore.rules` is a byte-identical
+   mirror (477 lines, SHA-256
+   `21479df69ef54d7b6e5f0248bc0169d582baca0becc3bd9d60c1da7b220106c2`).
+3. **Verify on the Pi** (physical access): all seven screens via
+   the phone remote; video plays smoothly and loops; local arrow
+   keys exit Events/Territory to a native screen; open a detail,
+   then remote-switch screens; reload the kiosk and confirm the
+   remote selection re-applies after the Pipeline default flash.
+4. **Verify the phone**: an assistant-signed-in phone must show
+   "Remote unavailable" and a disabled button (assistants cannot
+   control the kiosk).
+
+### Rollback
+
+Revert the merge commit and wait for GitHub Pages to publish. The
+rules change is additive (a new document path); leaving the
+published rules in place after a code rollback is harmless — the
+old code simply never reads the control document. No data migration
+is involved in either direction.
