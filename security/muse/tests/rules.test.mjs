@@ -462,7 +462,7 @@ test('kiosk mirrors accept only sanitized fields from attributed writers', async
   await assertSucceeds(getDoc(doc(db('muse'), 'kioskApplicants/a')));
   await assertSucceeds(getDoc(doc(db('readonly'), 'kioskApplicants/a')));
   await assertFails(getDoc(doc(db('unknown'), 'kioskApplicants/a')));
-  await assertFails(getDoc(env.unauthenticatedContext().firestore(), 'kioskApplicants/a'));
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'kioskApplicants/a')));
   // Nobody deletes mirrors client-side.
   await assertFails(deleteDoc(doc(db('owner'), 'kioskApplicants/a')));
 });
