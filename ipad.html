@@ -48,6 +48,12 @@
   }
   var dayStart = function () { var d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
   var review = function (a) { var t = stamp(a.updatedAt) || stamp(a.createdAt); return t > 0 && Date.now()-t >= 30*86400000; };
+  // Enlisted-folder membership, mirroring the phone app's isEnlisted(): filed
+  // in the Enlisted folder, or at the Enlisted stage unless deliberately
+  // filed in Cowards / Previous FY. The folder wins over the stage, so a
+  // record whose stage was edited away from Enlisted while the folder was
+  // still set still counts as enlisted.
+  var isEnlistedDoc = function (a) { return a.archiveFolder === 'enlisted' || (a.statusStage === 'Enlisted' && a.archiveFolder !== 'cowards' && a.archiveFolder !== 'previousFY'); };
   var dayDate = function (v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? new Date(+m[1],+m[2]-1,+m[3]).getTime() : stamp(v); };
   function stored(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
   function remove(key) { try { localStorage.removeItem(key); } catch (e) { /* private mode */ } }
@@ -187,7 +193,7 @@
             // territory matrix. Keep them aside (same updatedAt requirement
             // as the active filter); a deliberate Cowards / Previous FY
             // placement wins over the stage, matching the phone app.
-            next.enlistedDocs = next.applicants.filter(function (a) { return own(a,'updatedAt') && (a.archiveFolder === 'enlisted' || (a.statusStage === 'Enlisted' && a.archiveFolder !== 'cowards' && a.archiveFolder !== 'previousFY')); });
+            next.enlistedDocs = next.applicants.filter(function (a) { return own(a,'updatedAt') && isEnlistedDoc(a); });
             next.applicants = next.applicants.filter(function (a) { return a.archived !== true && !a.archiveFolder && own(a,'updatedAt'); });
             next.applicants.forEach(function (a) { if (a.statusStage === 'DEP') a.statusStage = 'Q&E'; });
             next.enlistedDocs.forEach(function (a) { if (a.statusStage === 'DEP') a.statusStage = 'Q&E'; });
@@ -259,10 +265,10 @@
     // Follow-ups stay active-only: enlisted applicants need no follow-up.
     var counted = a.concat((state.enlistedDocs || []).filter(function (v) { return v.archived === true || !!v.archiveFolder; }));
     counted.forEach(function (v) {
-      var area = String(v.generalArea || v.area || v.location || '').trim(), group;
-      if (own(counts,v.statusStage)) counts[v.statusStage]++;
+      var area = String(v.generalArea || v.area || v.location || '').trim(), group, stage = isEnlistedDoc(v) ? 'Enlisted' : v.statusStage;
+      if (own(counts,stage)) counts[stage]++;
       if (!area) area = 'Unassigned'; else if (!own(areas,area)) area = 'Other';
-      group = v.statusStage === 'Enlisted' ? 3 : v.statusStage === 'Q&E' ? 2 : ['Processing Authorized','Processing Scheduled','Waiver'].indexOf(v.statusStage) >= 0 ? 1 : 0;
+      group = stage === 'Enlisted' ? 3 : stage === 'Q&E' ? 2 : ['Processing Authorized','Processing Scheduled','Waiver'].indexOf(stage) >= 0 ? 1 : 0;
       areas[area][group]++;
     });
     a.forEach(function (v) {
