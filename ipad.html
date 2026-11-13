@@ -274,7 +274,7 @@
     });
     a.forEach(function (v) {
       var due = dayDate(v.nextActionDate);
-      if (v.nextAction && due && due <= today+30*86400000) follow.push({time:due,title:v.name || 'Unnamed',detail:(due < today ? 'OVERDUE · ' : '')+v.nextActionDate+' · '+v.nextAction+' · '+(v.statusStage || '')});
+      if (v.nextAction && due && due <= today+30*86400000) follow.push({time:due,title:kioskDisplayName(v.name),detail:(due < today ? 'OVERDUE · ' : '')+v.nextActionDate+' · '+v.nextAction+' · '+(v.statusStage || '')});
     });
     addPages(next,'Applicants ('+a.length+')',a,4,card);
     calendar.forEach(function (e) { if (e.time >= today && e.time < today+86400000) follow.push({time:e.time,title:e.title,detail:e.when+' · '+e.location}); });
