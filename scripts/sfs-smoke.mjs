@@ -141,7 +141,7 @@ assert.ok(worker.includes("'assets/stripes-for-skills-template.pdf'"));
 assert.ok(worker.includes("'aft-scoring-data.json'"));
 assert.ok(worker.includes('pdf-lib@1.17.1'));
 assert.ok(worker.includes('jszip@3.10.1'));
-assert.match(worker, /pibase-app-v39/);
+assert.match(worker, /pibase-app-v40/);
 assert.match(worker, /const isAppCode = [^\n]+aft-scoring-data\\\.json/);
 
 const template = await readFile(join(root, 'assets', 'stripes-for-skills-template.pdf'));
