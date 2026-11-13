@@ -118,12 +118,16 @@ export function restoreStageFor(applicant) {
 //
 // Minimization notes (Nov 2026 review): archivedFiscalYear was dropped —
 // no kiosk screen reads it (Previous FY grouping is editor-only).
+// age, priorService, and educationLevel were dropped in Nov 2026 too:
+// neither kiosk card layout renders them anymore (see
+// docs/privacy-hardening.md §8). generalArea stays, but only because the
+// legacy iPad's territory matrix counts applicants by area in aggregate;
+// no kiosk screen renders an applicant's area.
 // updatedBy stays because the rules use it to attribute mirror writes
-// (mirrorAttributed); it is never rendered. age, priorService, and
-// educationLevel stay because both kiosk card layouts render them.
+// (mirrorAttributed); it is never rendered.
 export const KIOSK_APPLICANT_FIELDS = [
-  'name', 'statusStage', 'age', 'generalArea', 'priorService',
-  'educationLevel', 'nextAction', 'nextActionDate', 'precedence',
+  'name', 'statusStage', 'generalArea',
+  'nextAction', 'nextActionDate', 'precedence',
   'updatedAt', 'createdAt', 'archived', 'archiveFolder',
   'updatedBy'
 ];
@@ -138,10 +142,7 @@ export function sanitizeForKiosk(applicant) {
   return {
     name: a.name ?? '',
     statusStage: a.statusStage ?? null,
-    age: a.age ?? null,
     generalArea: a.generalArea ?? '',
-    priorService: a.priorService ?? '',
-    educationLevel: a.educationLevel ?? '',
     nextAction: a.nextAction ?? '',
     nextActionDate: a.nextActionDate ?? '',
     precedence: a.precedence ?? 'normal',
@@ -156,8 +157,8 @@ export function sanitizeForKiosk(applicant) {
 // Display fields compared when deciding whether a mirror is in sync.
 // updatedBy is attribution, not display data, and is excluded; timestamps
 // are compared separately with a tolerance (see mirrorMatchesApplicant).
-const MIRROR_DISPLAY_FIELDS = ['name', 'statusStage', 'age', 'generalArea',
-  'priorService', 'educationLevel', 'nextAction', 'nextActionDate',
+const MIRROR_DISPLAY_FIELDS = ['name', 'statusStage', 'generalArea',
+  'nextAction', 'nextActionDate',
   'precedence', 'archived', 'archiveFolder'];
 
 // True when a stored mirror shows the same data as the applicant.
@@ -167,7 +168,10 @@ const MIRROR_DISPLAY_FIELDS = ['name', 'statusStage', 'age', 'generalArea',
 // skew and far below the 30-day Review window the timestamps drive.
 // Extra keys on an old mirror (e.g. a field cut from the allowlist later)
 // do not count as drift: the kiosk ignores unknown fields, and the next
-// save or rebuild rewrites the mirror without them.
+// save or rebuild rewrites the mirror without them. That covers
+// SURVEY-written mirrors too: the external worker still writes the
+// pre-cut 14-field shape (age/priorService/educationLevel included)
+// until it is updated, and those mirrors must not show up as stale.
 export function mirrorMatchesApplicant(mirror, applicant, toleranceMs = 300000) {
   if (!mirror || !applicant) return false;
   const m = sanitizeForKiosk(mirror);

@@ -54,6 +54,19 @@ test('login, archive filter, stage alias, escaping and read-only requests',()=>{
  assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
  b.api.poll();assert.ok(b.requests.every(r=>r.method==='GET' && r.headers.Authorization==='Bearer fake-id'));
 });
+test('cards do not render age, area, prior service, or education; territory still counts areas',()=>{
+ const b=boot();login(b);complete(b,[applicant('A','Synthetic Alpha',{age:{integerValue:'22'},generalArea:{stringValue:'Twin Falls'},priorService:{stringValue:'Army veteran'},educationLevel:{stringValue:'Some College'}})]);
+ assert.match(b.el('inner').innerHTML,/Synthetic Alpha/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/22 yo/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Twin Falls/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Army veteran/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Some College/);
+ // The territory slide still counts the applicant's area in aggregate.
+ for(let i=0;i<900 && !/Territory/.test(b.el('section').textContent);i++)b.api.rotate();
+ assert.match(b.el('section').textContent,/Territory/);
+ assert.match(b.el('inner').innerHTML,/Twin Falls<\/td><td>0<\/td><td>0<\/td><td>1<\/td><td>0<\/td>/);
+ assert.match(b.el('inner').innerHTML,/Unassigned<\/td><td>0<\/td><td>0<\/td><td>0<\/td><td>0<\/td>/);
+});
 test('kiosk poll reads only the sanitized collection',()=>{
  const b=boot();login(b);
  assert.ok(b.requests.some(r=>r.url.includes('/kioskApplicants?')), 'poll must request kioskApplicants');

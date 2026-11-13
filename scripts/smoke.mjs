@@ -170,10 +170,13 @@ assert.ok(committed.length > 0, 'committed calendar.ics should contain events');
 for (const e of committed) assert.ok(!Number.isNaN(e.start.getTime()), 'event must have a valid start');
 
 // ---- Privacy hardening: sanitized kiosk data --------------------------
-// sanitizeForKiosk keeps exactly the 14 allowlisted fields and drops
+// sanitizeForKiosk keeps exactly the 11 allowlisted fields and drops
 // everything sensitive, even when the source record carries it.
 // archivedFiscalYear was cut from the allowlist in Nov 2026: no kiosk
-// screen reads it (Previous FY grouping is editor-only).
+// screen reads it (Previous FY grouping is editor-only). age,
+// priorService, and educationLevel were cut in Nov 2026 too: neither
+// kiosk card layout renders them anymore. generalArea stays only for
+// the iPad's aggregate territory counts.
 const fullApplicant = {
   id: 'a1', name: 'Jane Doe', statusStage: 'Q&E', age: 22,
   generalArea: 'Twin Falls', priorService: 'None', educationLevel: 'HS',
@@ -192,9 +195,10 @@ const fullApplicant = {
 };
 const mirror = util.sanitizeForKiosk(fullApplicant);
 assert.deepStrictEqual(Object.keys(mirror).sort(), [...util.KIOSK_APPLICANT_FIELDS].sort());
-assert.strictEqual(util.KIOSK_APPLICANT_FIELDS.length, 14);
+assert.strictEqual(util.KIOSK_APPLICANT_FIELDS.length, 11);
 assert.strictEqual(mirror.name, 'Jane Doe');
 assert.strictEqual(mirror.statusStage, 'Q&E');
+assert.strictEqual(mirror.generalArea, 'Twin Falls');
 assert.strictEqual(mirror.updatedBy, 'uid-owner');
 assert.strictEqual(mirror.precedence, 'high');
 for (const dropped of ['phone', 'email', 'medicalIssueFlag', 'legalIssueFlag',
@@ -202,7 +206,7 @@ for (const dropped of ['phone', 'email', 'medicalIssueFlag', 'legalIssueFlag',
   'tattoosBrandsPiercings', 'maritalStatus', 'dependents', 'source',
   'surveyResponseId', 'recruiterSlug', 'school', 'previousStage',
   'archivedAt', 'restoredAt', 'flagNeedsReview', 'notes', 'id',
-  'archivedFiscalYear']) {
+  'archivedFiscalYear', 'age', 'priorService', 'educationLevel']) {
   assert.ok(!(dropped in mirror), `mirror must not carry ${dropped}`);
 }
 // Defaults for missing fields; never mutates the source.
@@ -227,6 +231,13 @@ assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, updatedAt: t2 }, appA)
 assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, updatedAt: tOld }, appA), false, 'stale timestamp must not match');
 assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, name: 'Janet Doe' }, appA), false, 'changed name must not match');
 assert.strictEqual(util.mirrorMatchesApplicant({ ...appA, archivedFiscalYear: 2026 }, appA), true, 'extra key on an old mirror must not count as drift');
+// A SURVEY-written mirror still carries the pre-cut fields (age,
+// priorService, educationLevel) until the worker is updated; those
+// extra keys must not flag the mirror as stale.
+const surveyMirror = { id: 'a1', name: 'Jane Doe', statusStage: 'Q&E', age: 22, generalArea: 'Twin Falls', priorService: 'None', educationLevel: 'HS', updatedAt: t2, createdAt: tOld, archived: false, archiveFolder: null };
+assert.strictEqual(util.mirrorMatchesApplicant(surveyMirror, appA), true, 'SURVEY mirror with cut fields must not count as drift');
+const appWithoutCutFields = { id: 'a1', name: 'Jane Doe', statusStage: 'Q&E', generalArea: 'Twin Falls', updatedAt: t1, createdAt: tOld, archived: false, archiveFolder: null };
+assert.strictEqual(util.mirrorMatchesApplicant(surveyMirror, appWithoutCutFields), true, 'SURVEY mirror with fields the applicant lacks must not count as drift');
 assert.strictEqual(util.mirrorMatchesApplicant(null, appA), false);
 assert.strictEqual(util.mirrorMatchesApplicant(appA, null), false);
 const drift = util.findMirrorDrift([appA, appB], [{ ...appA, updatedAt: t2 }, { id: 'orphan', name: 'Ghost' }]);
@@ -299,16 +310,23 @@ for (const text of ['Called to schedule MEPS', 'Great attitude, wants 11B',
 // kiosk must read the sanitized collection, not full applicants.
 const displayHtml = await readFile(join(root, 'display.html'), 'utf8');
 for (const leak of ['a.phone', 'a.email', 'waiverType', 'latestNote', 'resultNotes',
-  'physicalHealth', 'legalIssues', 'medicalIssueFlag', 'legalIssueFlag']) {
+  'physicalHealth', 'legalIssues', 'medicalIssueFlag', 'legalIssueFlag',
+  'a.age', 'a.generalArea', 'a.priorService', 'a.educationLevel']) {
   assert.ok(!displayHtml.includes(leak), `display.html must not reference ${leak}`);
 }
 assert.ok(displayHtml.includes("collection(db,'kioskApplicants')"), 'display.html must read kioskApplicants');
 assert.ok(!displayHtml.includes("collection(db,'applicants')"), 'display.html must not read applicants');
 assert.ok(displayHtml.includes('containsSensitiveNotePattern'), 'display.html must filter sensitive calendar events');
 const ipadHtml = await readFile(join(root, 'ipad.html'), 'utf8');
-for (const leak of ['waiverType', 'latestNote', 'resultNotes', 'physicalHealth', 'legalIssues']) {
+for (const leak of ['waiverType', 'latestNote', 'resultNotes', 'physicalHealth', 'legalIssues',
+  'a.age', 'a.priorService', 'a.educationLevel']) {
   assert.ok(!ipadHtml.includes(leak), `ipad.html must not reference ${leak}`);
 }
+// generalArea survives on the iPad only as the aggregate territory
+// count (v.generalArea); no card may render an applicant's area.
+assert.ok(!ipadHtml.includes('a.generalArea'), 'ipad.html cards must not render generalArea');
+assert.ok(ipadHtml.includes('v.generalArea'), 'ipad.html territory matrix still counts areas in aggregate');
+assert.ok(ipadHtml.includes('Applicants by area'), 'ipad.html must keep the territory screen');
 assert.ok(ipadHtml.includes("readCollection,'kioskApplicants'"), 'ipad.html must poll kioskApplicants');
 assert.ok(!ipadHtml.includes("readCollection,'applicants'"), 'ipad.html must not poll applicants');
 assert.ok(ipadHtml.includes('sensitiveEvent'), 'ipad.html must filter sensitive events');
