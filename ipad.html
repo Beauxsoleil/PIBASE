@@ -166,7 +166,7 @@
       if (gen !== generation) return;
       if (!ok) { busy = false; status(); return; }
       var token = session.idToken, next = {}, day = mountainNow().day;
-      var jobs = [ ['applicants',readCollection,'applicants'], ['mission',readDocument,'settings/mission'], ['events',readCollection,'events'], ['results',readCollection,'eventResults'], ['reminder',readDocument,'settings/inputAppointments-'+day] ];
+      var jobs = [ ['applicants',readCollection,'kioskApplicants'], ['mission',readDocument,'settings/mission'], ['events',readCollection,'events'], ['results',readCollection,'eventResults'], ['reminder',readDocument,'settings/inputAppointments-'+day] ];
       var left = jobs.length, error = 0;
       jobs.forEach(function (job) {
         job[1](job[2],token,function (code,value) {
@@ -238,7 +238,7 @@
   }
   function card(a) {
     var meta = [a.age ? a.age+' yo' : '',a.generalArea,a.priorService,a.educationLevel].filter(Boolean).map(esc).join(' · ');
-    return '<article class="card '+(review(a) ? 'flagged' : '')+'"><div class="name">'+esc(a.name || 'Unnamed')+'</div><div class="badge">'+(review(a) ? 'Review · ' : '')+esc(a.statusStage === 'Waiver' ? a.waiverType || '' : '')+'</div><div class="meta">'+meta+'</div>'+rail(a.statusStage)+(a.latestNote ? '<div class="note"><span class="label">Latest note</span>'+esc(a.latestNote)+'</div>' : '')+'</article>';
+    return '<article class="card '+(review(a) ? 'flagged' : '')+'"><div class="name">'+esc(a.name || 'Unnamed')+'</div><div class="badge">'+(review(a) ? 'Review' : '')+'</div><div class="meta">'+meta+'</div>'+rail(a.statusStage)+'</article>';
   }
   function panel(title,body) { return '<div class="panel"><h2>'+esc(title)+'</h2>'+body+'</div>'; }
   function row(title,detail) { return '<div class="row"><h3>'+esc(title)+'</h3><div class="note">'+esc(detail)+'</div></div>'; }
@@ -279,9 +279,9 @@
     summary = '<div class="big">'+enlisted+' / '+(target || '—')+'</div><p>'+remaining+' remaining · '+(target ? Math.round(enlisted/target*100)+'%' : 'Target not set')+' · '+activeCount+' active</p>';
     summary += STAGES.map(function (s) { return '<div class="row">'+esc(s)+' <strong class="right">'+counts[s]+'</strong><div class="bar"><div class="fill" style="width:'+(counted.length ? counts[s]/counted.length*100 : 0)+'%"></div></div></div>'; }).join('');
     next.push({title:'Pipeline / Mission',html:panel('FY'+String(fy).slice(-2)+' Recruiting Mission',summary)});
-    events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts,resultNotes:r.resultNotes}; }));
+    events = state.events.concat(state.results.map(function (r) { return {name:r.summary,date:r.start,location:r.location,type:'iCloud',leads:r.leads,appointments:r.appointments,qualified:r.qualified,contracts:r.contracts}; }));
     events.sort(function (x,y) { return dayDate(y.date)-dayDate(x.date); });
-    addPages(next,'Recruiting Events / Results',events,4,function (e) { return panel(e.name || 'Unnamed event',esc([e.date,e.type,e.location,e.poc].filter(Boolean).join(' · '))+'<p>'+esc(Number(e.leads)||0)+' leads · '+esc(Number(e.appointments)||0)+' appts · '+esc(Number(e.qualified)||0)+' qualified · '+esc(Number(e.contracts)||0)+' contracts</p><div class="note">'+esc(e.resultNotes || '')+'</div>'); });
+    addPages(next,'Recruiting Events / Results',events,4,function (e) { return panel(e.name || 'Unnamed event',esc([e.date,e.type,e.location,e.poc].filter(Boolean).join(' · '))+'<p>'+esc(Number(e.leads)||0)+' leads · '+esc(Number(e.appointments)||0)+' appts · '+esc(Number(e.qualified)||0)+' qualified · '+esc(Number(e.contracts)||0)+' contracts</p>'); });
     summary = '<table><thead><tr><th>Area</th><th>Early</th><th>Processing</th><th>Q&amp;E</th><th>Enlisted</th></tr></thead><tbody>';
     Object.keys(areas).forEach(function (area) { summary += '<tr><td>'+esc(area)+'</td>'+areas[area].map(function (n) { return '<td>'+n+'</td>'; }).join('')+'</tr>'; });
     next.push({title:'Territory',html:panel('Applicants by area',summary+'</tbody></table>')});

@@ -88,6 +88,88 @@ export function restoreStageFor(applicant) {
   return applicant?.statusStage || undefined;
 }
 
+// ---- Kiosk privacy: sanitized applicant data ---------------------------
+// The Pi kiosk and legacy iPad display only ever need the fields below.
+// Everything else (contact details, medical/legal flags, waiver data,
+// notes, tattoos, marital/dependent data, survey provenance) stays in the
+// full applicant document, which kiosk authentication cannot read.
+// Keep this list in sync with validKioskApplicant() in firestore.rules
+// and with the kioskApplicants tests.
+export const KIOSK_APPLICANT_FIELDS = [
+  'name', 'statusStage', 'age', 'generalArea', 'priorService',
+  'educationLevel', 'nextAction', 'nextActionDate', 'precedence',
+  'updatedAt', 'createdAt', 'archived', 'archiveFolder',
+  'archivedFiscalYear', 'updatedBy'
+];
+
+// Build the sanitized kiosk copy of an applicant: only allowlisted fields,
+// never a reference to the source object. Missing fields resolve to the
+// neutral value the kiosk screens already handle ('' / null / false).
+// updatedAt is always present on a written mirror (the caller stamps it);
+// createdAt may be null for legacy records.
+export function sanitizeForKiosk(applicant) {
+  const a = applicant || {};
+  return {
+    name: a.name ?? '',
+    statusStage: a.statusStage ?? null,
+    age: a.age ?? null,
+    generalArea: a.generalArea ?? '',
+    priorService: a.priorService ?? '',
+    educationLevel: a.educationLevel ?? '',
+    nextAction: a.nextAction ?? '',
+    nextActionDate: a.nextActionDate ?? '',
+    precedence: a.precedence ?? 'normal',
+    updatedAt: a.updatedAt ?? null,
+    createdAt: a.createdAt ?? null,
+    archived: a.archived === true,
+    archiveFolder: a.archiveFolder ?? null,
+    archivedFiscalYear: a.archivedFiscalYear ?? null,
+    updatedBy: a.updatedBy ?? ''
+  };
+}
+
+// ---- Medical / legal tri-state flags ------------------------------------
+// The editor stores only yes / no / unknown. Legacy records predate the
+// flags and carry null until first edited; null is valid, anything else
+// is not. Mirrors validApplicant() in firestore.rules.
+export const ISSUE_FLAG_VALUES = ['yes', 'no', 'unknown'];
+
+export function isValidIssueFlag(value) {
+  return value == null || ISSUE_FLAG_VALUES.includes(value);
+}
+
+// True when a legacy applicant still carries free-text medical or legal
+// narrative. The editor no longer shows or edits these fields; the value
+// is preserved untouched until the approved retention process removes it.
+export function hasLegacySensitiveFields(applicant) {
+  const physical = applicant?.physicalHealth;
+  const legal = applicant?.legalIssues;
+  return (typeof physical === 'string' && physical.trim().length > 0)
+    || (typeof legal === 'string' && legal.trim().length > 0);
+}
+
+// ---- Notes hygiene ------------------------------------------------------
+// Keyword screen for the notes box: a speed bump, not a guarantee. It
+// cannot catch paraphrases, abbreviations, or sensitive detail that
+// avoids these words, so it only prompts a confirm dialog; the recruiter
+// can still save. Never use this list to block a save outright.
+const SENSITIVE_NOTE_WORDS = [
+  // Medical
+  'diagnos', 'medication', 'prescri', 'dosage', 'surgery', 'therapist',
+  'psychiatr', 'psycholog', 'adhd', 'asthma', 'diabetes', 'seizure',
+  'depression', 'anxiety', 'ptsd', 'bipolar', 'insulin', 'inhaler',
+  // Legal
+  'arrest', 'convict', 'felony', 'misdemeanor', 'probation', 'parole',
+  'jail', 'prison', 'dui', 'dwi', 'lawsuit', 'warrant', 'theft',
+  'assault', 'burglary', 'robbery', 'drug', 'marijuana', 'cocaine'
+];
+const SENSITIVE_NOTE_PATTERN = new RegExp(
+  `\\b(${SENSITIVE_NOTE_WORDS.join('|')})\\w*\\b`, 'i');
+
+export function containsSensitiveNotePattern(text) {
+  return SENSITIVE_NOTE_PATTERN.test(String(text || ''));
+}
+
 // "YYYY-MM-DD" -> local-midnight Date, or null when malformed/empty.
 export function parseDateOnly(v) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return null;

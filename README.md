@@ -13,8 +13,10 @@ and Firebase browser SDK.
 On iPhone, open `index.html` in Safari, tap **Share → Add to Home Screen**, and
 launch PIBASE from the new icon. If an update is ready, the phone displays a
 **Refresh** action so it never reloads over an unsaved form. Offline status is
-shown at the bottom of the phone screen; Firestore continues to provide the last
-cached records and queues supported writes until connectivity returns.
+shown at the bottom of the phone screen; records stay available while the app
+is open, but Firestore persistence is disabled, so a browser restart while
+offline shows no applicant data until you reconnect (see
+[privacy hardening](docs/privacy-hardening.md)).
 
 The kiosk installs updates automatically and reloads through its existing safe
 idle-recovery path. `scripts/pwa-smoke.mjs` verifies the manifest, icons, page
@@ -87,14 +89,15 @@ Your site will be live at `https://<your-username>.github.io/<repo-name>/`.
 
 ## 2. Firestore security rules
 
-The canonical rules live in [`firestore.rules`](./firestore.rules). Two ways to
-deploy them:
+The canonical rules live in [`security/muse/firestore.rules`](./security/muse/firestore.rules);
+root [`firestore.rules`](./firestore.rules) is a byte-identical mirror — keep
+both synchronized. Two ways to deploy them:
 
 **A. Firebase console (no CLI needed)**
 
 1. Open https://console.firebase.google.com/ and select project **pi-base-a3a09**.
 2. Go to **Build → Firestore Database → Rules** tab.
-3. Click **Edit rules**, replace everything with the contents of `firestore.rules`, and click **Publish**.
+3. Click **Edit rules**, replace everything with the contents of `security/muse/firestore.rules`, and click **Publish**.
 
 **B. Firebase CLI**
 
@@ -105,7 +108,7 @@ firebase use pi-base-a3a09
 firebase deploy --only firestore:rules
 ```
 
-(`firebase.json` in this repo already points at `firestore.rules`.)
+(`firebase.json` in this repo already points at `security/muse/firestore.rules`.)
 
 What changed from the old setup:
 
@@ -113,6 +116,11 @@ What changed from the old setup:
   which let anyone on the internet read names, phones, emails, health and legal
   notes via the Firestore REST API (the project ID is public in
   `firebase-config.js`). Reads now require `request.auth != null`.
+- **The kiosk cannot read full applicant documents.** It reads only the
+  sanitized `kioskApplicants` collection (name, stage, area, next action and
+  other display-only fields; no phone, email, flags, waiver data, or notes).
+  See [privacy hardening](docs/privacy-hardening.md) for the design and the
+  deployment sequence (rules first, then code, then backfill from the phone).
 - **All collections the app actually writes are covered** — `applicants`,
   `applicants/{id}/notes`, `events`, and `settings/mission`.
 - **Writes are validated** (name required, numeric fields typed) instead of
@@ -192,7 +200,7 @@ Reboot — the Pi should boot straight into the live board.
 
 - The `apiKey` in `firebase-config.js` is safe to be public — it identifies the project, it doesn't authorize access. Security comes from the Firestore rules above.
 - If the TV shows "Connection error," check the MiFi puck's signal — the Pi needs internet access to reach Firestore. Also confirm the **Anonymous** sign-in provider is enabled (see step 3).
-- The kiosk and the phone both enable Firestore offline persistence, so cached data stays visible when the MiFi puck drops. The kiosk refreshes its calendar feed every 5 minutes; the GitHub Action republishes `calendar.ics` every 10 minutes.
+- Firestore offline persistence is disabled: the kiosk and phone keep live data only while the page is open. A browser restart while offline shows no applicant records until reconnected. The kiosk refreshes its calendar feed every 5 minutes; the GitHub Action republishes `calendar.ics` every 10 minutes.
 - For stronger protection against scrapers, add **Firebase App Check** (reCAPTCHA) in the console and call `initializeAppCheck` in `firebase-config.js`.
 
 ### Calendar feed secret

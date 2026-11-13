@@ -15,7 +15,8 @@ import {
   query,
   orderBy,
   where,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth,
@@ -27,7 +28,7 @@ import {
 import { initAppointmentReminder } from './appointment-reminder.js';
 import { initKioskRuntime } from './kiosk-runtime.js';
 import { initEventsUi } from './events-ui.js';
-import { applicantNeedsReview, isArchived, isEnlisted } from './pibase-util.js';
+import { applicantNeedsReview, isArchived, isEnlisted, sanitizeForKiosk } from './pibase-util.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp-OSq87o6e4XBsSryh5ozwzw5543oKQE",
@@ -56,12 +57,13 @@ export const auth = getAuth(app);
 // Existing browser IndexedDB data must be cleared separately on deployed devices.
 
 // The TV reads Firestore without a recruiter login, so it signs in with an
-// anonymous credential: security rules then require request.auth != null
-// (protecting applicant PII from unauthenticated reads) instead of
-// `allow read: if true`. Requires the "Anonymous" provider in
-// Firebase console -> Authentication. authReady always resolves (the catch
-// swallows the failure) so kiosk code never hangs; a failed sign-in surfaces
-// as the usual Firestore permission-denied error on the display.
+// anonymous credential enrolled under the `kiosk` role: security rules let
+// that role read only the sanitized `kioskApplicants` collection (plus
+// events, mission, and the daily reminder), never full applicant documents.
+// Requires the "Anonymous" provider in Firebase console -> Authentication.
+// authReady always resolves (the catch swallows the failure) so kiosk code
+// never hangs; a failed sign-in surfaces as the usual Firestore
+// permission-denied error on the display.
 export const authReady = isKiosk
   ? signInAnonymously(auth).catch(error => {
       console.error('PIBASE kiosk anonymous sign-in failed. Enable the Anonymous '
@@ -91,6 +93,54 @@ export { isArchived, isEnlisted };
 // downstream code never has to special-case the alias.
 export function canonicalStage(stage) {
   return stage === 'DEP' ? 'Q&E' : stage;
+}
+
+// ---- Sanitized kiosk data (kioskApplicants) ---------------------------
+// Firestore rules cannot restrict individual fields inside a readable
+// document, so the kiosk never reads `applicants`. Every applicant write
+// in the editor mirrors a sanitized copy (see sanitizeForKiosk) into
+// `kioskApplicants/{same-id}`, and the kiosk + iPad read only that
+// collection. The mirror is a full replace (no merge), so a field removed
+// from the applicant cannot linger in the kiosk copy.
+//
+// Mirror writes are best-effort after the applicant write succeeds: a
+// failed mirror must never fail the save itself. Callers catch the
+// rejection and warn; the next save (or "Rebuild kiosk data") repairs it.
+export async function writeKioskMirror(id, applicantData) {
+  if (!id) return;
+  await setDoc(doc(db, 'kioskApplicants', id), sanitizeForKiosk(applicantData));
+}
+
+// One-time backfill / drift repair: rewrite every mirror from the
+// in-memory applicant list (no extra reads). Batched at 500 writes per
+// batch; the applicant list is small. Legacy records without updatedAt
+// get a fresh server timestamp so the kiosk's orderBy('updatedAt') query
+// still returns them. Returns { written, failed }.
+export async function rebuildKioskMirrors(applicants, uid) {
+  const docs = Array.isArray(applicants) ? applicants : [];
+  let written = 0, failed = 0;
+  for (let i = 0; i < docs.length; i += 500) {
+    const batch = writeBatch(db);
+    let queued = 0;
+    for (const a of docs.slice(i, i + 500)) {
+      if (!a?.id) { failed++; continue; }
+      batch.set(doc(db, 'kioskApplicants', a.id), sanitizeForKiosk({
+        ...a,
+        updatedAt: a.updatedAt || serverTimestamp(),
+        updatedBy: uid || a.updatedBy || ''
+      }));
+      queued++;
+    }
+    if (!queued) continue;
+    try {
+      await batch.commit();
+      written += queued;
+    } catch (error) {
+      console.warn('PIBASE kiosk mirror rebuild batch failed', error);
+      failed += queued;
+    }
+  }
+  return { written, failed };
 }
 
 // Plain snapshot passthrough for non-applicant queries (events, settings, ...).

@@ -20,12 +20,12 @@ function boot(saved, storageFails=false) {
 }
 const key='pibase.ipad.v1.session';
 function login(b){b.el('email').value='test@example.invalid';b.el('password').value='test-password';b.el('login').onsubmit({preventDefault(){}});const req=b.requests.shift();assert.match(req.url,/signInWithPassword/);req.respond(200,{idToken:'fake-id',refreshToken:'fake-refresh',localId:'fake-user',expiresIn:'3600'});assert.equal(b.el('password').value,'');}
-const doc=(id, fields)=>({name:'projects/demo/databases/(default)/documents/applicants/'+id,fields});
+const doc=(id, fields)=>({name:'projects/demo/databases/(default)/documents/kioskApplicants/'+id,fields});
 const applicant=(id,name,extra={})=>doc(id,{name:{stringValue:name},updatedAt:{timestampValue:'2026-10-01T00:00:00Z'},statusStage:{stringValue:'DEP'},...extra});
 function complete(b,apps=[applicant('A','Synthetic Alpha')]){
   const pending=b.requests.splice(0);
   for(const req of pending){
-    if(req.url.includes('/applicants?'))req.respond(200,{documents:apps});
+    if(req.url.includes('/kioskApplicants?'))req.respond(200,{documents:apps});
     else if(/\/(events|eventResults)\?/.test(req.url))req.respond(200,{documents:[]});
     else if(req.url.includes('/settings/'))req.respond(404,{});
     else if(req.url.includes('calendar.ics'))req.respond(200,'BEGIN:VCALENDAR\nEND:VCALENDAR');
@@ -44,10 +44,21 @@ test('typed values preserve unsafe integers and nested types',()=>{
  assert.equal(JSON.stringify(d.a),'[12,false,null]');assert.equal(d.big,'9007199254740993');assert.equal(d.geo.latitude,1);assert.equal(d.timestamp,'2026-01-01T00:00:00.123456Z');
 });
 test('login, archive filter, stage alias, escaping and read-only requests',()=>{
- const b=boot();login(b);complete(b,[applicant('A','<img onerror=alert(1)>',{latestNote:{stringValue:'<script>secret</script>'}}),applicant('B','Archived',{archiveFolder:{stringValue:'Previous FY'}})]);
+ const b=boot();login(b);complete(b,[applicant('A','<img onerror=alert(1)>',{latestNote:{stringValue:'<script>secret</script>'},waiverType:{stringValue:'Medical waiver'}}),applicant('B','Archived',{archiveFolder:{stringValue:'Previous FY'}})]);
  assert.equal(b.api.getState().applicants.length,1);assert.equal(b.api.getState().applicants[0].statusStage,'Q&E');
- assert.match(b.el('inner').innerHTML,/&lt;img/);assert.match(b.el('inner').innerHTML,/&lt;script/);assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
+ assert.match(b.el('inner').innerHTML,/&lt;img/);
+ // Privacy: even if a mirror ever carried a note or waiver type, the
+ // legacy display must not render either.
+ assert.doesNotMatch(b.el('inner').innerHTML,/secret/);
+ assert.doesNotMatch(b.el('inner').innerHTML,/Medical waiver/);
+ assert.ok(!b.disk[key].includes('test-password'));assert.ok(!b.disk[key].includes('fake-id'));
  b.api.poll();assert.ok(b.requests.every(r=>r.method==='GET' && r.headers.Authorization==='Bearer fake-id'));
+});
+test('kiosk poll reads only the sanitized collection',()=>{
+ const b=boot();login(b);
+ assert.ok(b.requests.some(r=>r.url.includes('/kioskApplicants?')), 'poll must request kioskApplicants');
+ assert.ok(b.requests.every(r=>!r.url.includes('/applicants?')), 'poll must never request full applicants');
+ complete(b);
 });
 test('enlisted applicants count toward the mission but leave the active roster',()=>{
  const b=boot();login(b);complete(b,[
@@ -68,7 +79,7 @@ test('enlisted applicants count toward the mission but leave the active roster',
  assert.match(b.el('inner').innerHTML,/Unassigned<\/td><td>0<\/td><td>0<\/td><td>1<\/td><td>2<\/td>/);
 });
 test('all pages are collected before replacing visible data',()=>{
- const b=boot();login(b);const first=b.requests.find(r=>r.url.includes('/applicants?'));b.requests.splice(b.requests.indexOf(first),1);
+ const b=boot();login(b);const first=b.requests.find(r=>r.url.includes('/kioskApplicants?'));b.requests.splice(b.requests.indexOf(first),1);
  first.respond(200,{documents:[applicant('A','Page one')],nextPageToken:'cursor &?'});const second=b.requests.pop();assert.match(second.url,/pageToken=cursor%20%26%3F/);
  complete(b);assert.equal(b.api.getState().applicants.length,0);second.respond(200,{documents:[applicant('B','Page two')]});assert.equal(b.api.getState().applicants.length,2);
 });
