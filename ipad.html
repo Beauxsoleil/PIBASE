@@ -243,7 +243,7 @@
     return '<div class="rail">' + SHORT.map(function (s,i) { return '<div class="node '+(i < index ? 'done' : i === index ? 'current' : '')+'">'+esc(s)+'</div>'; }).join('') + '</div>';
   }
   function card(a) {
-    return '<article class="card '+(review(a) ? 'flagged' : '')+'"><div class="name">'+esc(a.name || 'Unnamed')+'</div><div class="badge">'+(review(a) ? 'Review' : '')+'</div>'+rail(a.statusStage)+'</article>';
+    return '<article class="card '+(review(a) ? 'flagged' : '')+'"><div class="name">'+esc(kioskDisplayName(a.name))+'</div><div class="badge">'+(review(a) ? 'Review' : '')+'</div>'+rail(a.statusStage)+'</article>';
   }
   function panel(title,body) { return '<div class="panel"><h2>'+esc(title)+'</h2>'+body+'</div>'; }
   function row(title,detail) { return '<div class="row"><h3>'+esc(title)+'</h3><div class="note">'+esc(detail)+'</div></div>'; }
@@ -294,6 +294,7 @@
     next.push({title:'Territory',html:panel('Applicants by area',summary+'</tbody></table>')});
     slides = next; if (slide >= slides.length) slide = 0; render();
   }
+  function kioskDisplayName(name){var parts=String(name||'').trim().split(/\s+/).filter(Boolean);if(!parts.length)return 'Unnamed';if(parts.length===1)return parts[0].charAt(0)+'.';return parts[0].charAt(0)+'. '+parts.slice(1).join(' ');}
   function render() {
     if (!slides.length) return;
     var s = slides[slide];
