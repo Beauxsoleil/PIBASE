@@ -80,7 +80,7 @@ export function initKioskRuntime() {
     if (!indicator) return;
     const detail = document.getElementById('detailView');
     if (detail?.classList.contains('open')) { indicator.textContent = 'Applicant Detail'; return; }
-    const order = [['boardScreen','Applicant Board'],['todayScreen','Today'],['calendarScreen','Calendar'],['pipelineScreen','Pipeline / Mission'],['eventsScreen','Recruiting Events'],['territoryScreen','Territory Analytics']];
+    const order = [['boardScreen','Applicant Board'],['todayScreen','Today'],['calendarScreen','Calendar'],['pipelineScreen','Pipeline / Mission'],['eventsScreen','Recruiting Events'],['territoryScreen','Territory Analytics'],['videoScreen','Video']];
     const index = order.findIndex(([id]) => document.getElementById(id)?.classList.contains('active'));
     const resolved = index >= 0 ? index : 0;
     indicator.textContent = `${resolved + 1} / ${order.length} · ${order[resolved][1]}`;
