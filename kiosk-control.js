@@ -8,7 +8,7 @@ if(isKiosk){
   style.textContent='#pibaseVideoOverlay{position:fixed;inset:0;z-index:90;background:#000;display:none}#pibaseVideoOverlay.active{display:block}#pibaseVideoOverlay video{width:100%;height:100%;object-fit:contain;background:#000}body.pibase-video-active #pibaseKioskNav,body.pibase-video-active #pibaseStatusStrip,body.pibase-video-active #pibaseScreenIndicator{display:none!important}';
   document.head.appendChild(style);
   const overlay=document.createElement('div');overlay.id='pibaseVideoOverlay';
-  const video=document.createElement('video');video.src='./assets/kiosk-1080p.mp4';video.autoplay=false;video.loop=true;video.muted=true;video.playsInline=true;video.preload='none';video.setAttribute('aria-label','Idaho National Guard kiosk video');overlay.appendChild(video);
+  const video=document.createElement('video');video.src='./assets/kiosk-720p.mp4';video.autoplay=false;video.loop=true;video.muted=true;video.playsInline=true;video.preload='none';video.setAttribute('aria-label','Idaho National Guard kiosk video');overlay.appendChild(video);
   video.addEventListener('error',()=>{window.__PIBASE_VIDEO_ERROR__=true;console.warn('Kiosk video failed to load or decode');});
   const install=()=>document.body.appendChild(overlay);
   if(document.body)install();else document.addEventListener('DOMContentLoaded',install,{once:true});
