@@ -411,7 +411,7 @@ assert.ok(eventsUi.includes('routeOrigin=null'), 'leaving an extra screen must c
 // the other app code, and the cache version must match the pin in
 // sfs-smoke.mjs.
 assert.ok(swSrc.includes('kiosk-control\\.js'), 'service worker must route kiosk-control.js as app code');
-assert.ok(swSrc.includes("const CACHE_NAME = 'pibase-app-v43';"), 'service worker cache must be v43');
+assert.ok(swSrc.includes("const CACHE_NAME = 'pibase-app-v44';"), 'service worker cache must be v44');
 // Rules: the control document exists, owner-write only, screen 0-6.
 assert.ok(museRules.includes('match /settings/kioskControl'), 'rules must cover settings/kioskControl');
 assert.ok(museRules.includes('request.resource.data.screen <= 6'), 'rules must bound the screen index');
