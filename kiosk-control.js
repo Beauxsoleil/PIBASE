@@ -5,7 +5,7 @@ const isKiosk=/\/display\.html$/.test(location.pathname);
 const controlRef=doc(db,'settings','kioskControl');
 if(isKiosk){
   const style=document.createElement('style');
-  style.textContent='#pibaseVideoOverlay{position:fixed;inset:0;z-index:90;background:#000;display:none}#pibaseVideoOverlay.active{display:block}#pibaseVideoOverlay video{width:100%;height:100%;object-fit:contain;background:#000}body.pibase-video-active #pibaseKioskNav,body.pibase-video-active #pibaseStatusStrip,body.pibase-video-active #pibaseScreenIndicator{display:none!important}';
+  style.textContent='#pibaseVideoOverlay{position:fixed;inset:0;z-index:90;background:#000;display:none;align-items:center;justify-content:center;overflow:hidden}#pibaseVideoOverlay.active{display:flex}#pibaseVideoOverlay video{display:block;width:90%;height:90%;max-width:90%;max-height:90%;object-fit:contain;background:#000}body.pibase-video-active #pibaseKioskNav,body.pibase-video-active #pibaseStatusStrip,body.pibase-video-active #pibaseScreenIndicator{display:none!important}';
   document.head.appendChild(style);
   const overlay=document.createElement('div');overlay.id='pibaseVideoOverlay';
   const video=document.createElement('video');video.src='./assets/kiosk-720p.mp4';video.autoplay=false;video.loop=true;video.muted=true;video.playsInline=true;video.preload='none';video.setAttribute('aria-label','Idaho National Guard kiosk video');overlay.appendChild(video);
